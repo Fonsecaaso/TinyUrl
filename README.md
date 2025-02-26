@@ -8,3 +8,25 @@ Para rodar o projeto utilizando o Docker, execute o seguinte comando:
 
 ```bash
 docker-compose up --build
+```
+
+## Fases do projeto
+
+### ✅ 1. Aplicações golang e angular com funcionalidades básicas
+
+- Um server backend feito em angular com as funcionalidades de inserir e ler tupla no redis.
+- E uma aplicação em angular com as funcionalidades de encurtar url via formulário e com a url retornada da criação redirecionar para o endereço inicial. Ambas aplicações orquestradas via docker-compose.
+
+
+### 2. Autenticação, url personalizada, expiração de urls (default, personalizada e inteligente - de acordo com # de acessos)
+
+- Teremos criação de usuários, com login e senha, token jwt no frontend
+- Na página do usuário ele pode personalizar a url encurtada, pode listar as urls que já criou
+- Setar um tempo de expiração das urls no redis, permitir que o usuário configure esse tempo, e de acordo com a frequência de acessos às urls determinar quais urls serão deletadas (i.e, urls com mais de 48h sem acesso são deletadas ou as 30% urls menos acessadas são deletadas a cada 24h)
+
+### 3. Observabilidade
+
+- Prometeus e Grafana: Dashboard com métricas de consumo de mémoria e CPU, gráfico com tempo de resposta da api com percentis
+- ElasticSearch e Kibana: Estatística de acessoas às urls, frequência, geografia
+- OpenTelemetry: Tracing para determinar gargalos no fluxo do código
+

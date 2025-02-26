@@ -1,0 +1,9 @@
+<div class="container">
+    <input [(ngModel)]="urlInput" placeholder="Insira a URL" />
+    <button (click)="shorten()">Encurtar URL</button>
+  
+    <div *ngIf="shortenedUrl">
+      <p><strong>Compartilhe com seus amigos:</strong> localhost:4200/{{ shortenedUrl }}</p>
+    </div>
+  </div>
+  

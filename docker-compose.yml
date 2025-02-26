@@ -21,22 +21,44 @@ services:
     tty: true
     networks:
       - bridge
+
   go-app:
-    build: .
-    container_name: tiny-url
+    container_name: go-app
+    build: 
+      context: ./go-server
+      dockerfile: Dockerfile
+    depends_on:
+      - redis
     ports:
-      - "8080:8080"  # Mapeando a porta 8080 do container para a máquina host
+      - "8080:8080"  
     volumes:
-      - .:/app  # Monta o diretório atual no container (útil para desenvolvimento)
+      - ./go-server:/app  
     environment:
-      - GO_ENV=production  # Defina qualquer variável de ambiente que seu app precise
+      - GO_ENV=production  
+    networks:
+      - bridge
+
+  angular-app:
+    container_name: angular-app
+    build:
+      context: ./angular-app
+      dockerfile: Dockerfile
+    depends_on:
+      - go-app
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./angular-app:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true # Necessário para detectar mudanças no código em sistemas de arquivos montados
+    command: ["npm", "run", "start", "--", "--host", "0.0.0.0", "--port", "4200"]
     networks:
       - bridge
 
 volumes:
   redis-data:
+
 networks:
   bridge:
-    driver:
-      bridge
-
+    driver: bridge

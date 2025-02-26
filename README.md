@@ -1,6 +1,6 @@
 # TinyUrl
 
-Este projeto é um encurtador de URLs simples, desenvolvido em Go, que permite encurtar e buscar URLs por um identificador gerado. Ele usa um simples redis como banco chave-valor.
+Este encurtador de URL é um serviço rápido e confiável desenvolvido com Go para back-end, Angular para front-end e Redis para cache de alto desempenho. Ele permite que os usuários encurtem URLs longos, tornando-os mais fáceis de compartilhar e gerenciar. O aplicativo fornece redirecionamentos rápidos e escalabilidade, garantindo latência mínima e desempenho ideal.
 
 ## Como Executar
 

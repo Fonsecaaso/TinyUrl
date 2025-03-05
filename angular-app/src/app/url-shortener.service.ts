@@ -14,11 +14,11 @@ interface ResolveResponse {
   providedIn: 'root'
 })
 export class UrlShortenerService {
-  private apiUrl = 'http://localhost:8080/'; // URL da sua API
+  private apiUrl = 'http://localhost:8080/'; // Defina um endpoint fixo
 
   constructor(private http: HttpClient) {}
 
   shortenUrl(url: string): Observable<ApiResponse> {
-    return this.http.post<ApiResponse>(`${this.apiUrl}${url}`, {}); // Chamada para API
+    return this.http.post<ApiResponse>(this.apiUrl, { url }); // Envia a URL no body
   }
 }

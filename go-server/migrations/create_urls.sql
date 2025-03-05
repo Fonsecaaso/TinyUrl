@@ -1,0 +1,5 @@
+CREATE TABLE urls (
+    url VARCHAR NOT NULL,
+    id VARCHAR UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);

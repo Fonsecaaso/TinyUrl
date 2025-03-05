@@ -10,16 +10,19 @@ Para rodar o projeto utilizando o Docker, execute o seguinte comando:
 docker-compose up --build
 ```
 
+## Arquitetura Atual
+
+O código atual consiste em uma aplicação em angular, um server em go, um cache redis e um banco postgres.
+
+![image](https://github.com/user-attachments/assets/beb05f45-9caa-402b-ba46-37d4f24c2193)
+
+
 ## Fases do projeto
 
 ### ✅ 1. Aplicações golang e angular com funcionalidades básicas
 
 - Um server backend feito em angular com as funcionalidades de inserir e ler tupla no redis.
 - E uma aplicação em angular com as funcionalidades de encurtar url via formulário e com a url retornada da criação redirecionar para o endereço inicial. Ambas aplicações orquestradas via docker-compose.
-
-#### Arquitetura
-![image](https://github.com/user-attachments/assets/beb05f45-9caa-402b-ba46-37d4f24c2193)
-
 
 
 ### 2. Autenticação, url personalizada, expiração de urls (default, personalizada e inteligente - de acordo com # de acessos)

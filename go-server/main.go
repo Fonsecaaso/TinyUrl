@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/fonsecaaso/TinyUrl/go-server/config"
 	db "github.com/fonsecaaso/TinyUrl/go-server/internal/database"
 	route "github.com/fonsecaaso/TinyUrl/go-server/internal/routes"
 	"go.uber.org/zap"
@@ -10,7 +11,15 @@ func main() {
 	logger := zap.Must(zap.NewProduction())
 	defer logger.Sync()
 
-	redisClient, err := db.NewRedisClient()
+	secrets, err := config.LoadConfig()
+	if err != nil {
+		logger.Error(
+			"error loading secrets",
+			zap.Error(err),
+		)
+	}
+
+	redisClient, err := db.NewRedisClient(secrets)
 	if err != nil {
 		logger.Panic("redis failed to initialize",
 			zap.Error(err),
@@ -19,7 +28,7 @@ func main() {
 		logger.Info("redis is connected")
 	}
 
-	pgClient, err := db.NewPostgresClient()
+	pgClient, err := db.NewPostgresClient(secrets)
 	if err != nil {
 		logger.Panic("postgres failed to initialize",
 			zap.Error(err),

@@ -22,7 +22,7 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 		MaxAge:           12 * time.Hour,
 	}))
 
-	r.POST("/:url", func(c *gin.Context) { service.CreateTinyUrl(c, redisClient, pgClient) })
+	r.POST("/", func(c *gin.Context) { service.CreateTinyUrl(c, redisClient, pgClient) })
 	r.GET("/:id", func(c *gin.Context) { service.GetUrl(c, redisClient, pgClient) })
 
 	return r

@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 
+	config "github.com/fonsecaaso/TinyUrl/go-server/config"
 	"github.com/go-redis/redis/v8"
 )
 
-func NewRedisClient() (*redis.Client, error) {
+func NewRedisClient(secrets *config.Config) (*redis.Client, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "redis-server:6379", // Endereço do Redis (alterar se necessário)
-		Password: "",                  // Sem senha (default)
-		DB:       0,                   // Seleciona o banco de dados 0
+		Addr:     secrets.RedisAddr, // Endereço do Redis (alterar se necessário)
+		Password: "",                // Sem senha (default)
+		DB:       0,                 // Seleciona o banco de dados 0
 	})
 
 	// Health check: Testa a conexão com o Redis

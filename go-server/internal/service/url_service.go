@@ -11,9 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type Body struct {
+	URL string `json:"url"`
+}
+
 func CreateTinyUrl(c *gin.Context, redisClient *redis.Client, pgClient *pgxpool.Pool) {
 	ctx := context.Background()
-	url := c.Param("url")
+	body := Body{}
+	if err := c.BindJSON(&body); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
 
 	var key string
 	var err error
@@ -30,7 +38,7 @@ func CreateTinyUrl(c *gin.Context, redisClient *redis.Client, pgClient *pgxpool.
 		}
 	}
 
-	_, err = pgClient.Exec(ctx, "INSERT INTO urls (id, url) VALUES ($1, $2)", key, url)
+	_, err = pgClient.Exec(ctx, "INSERT INTO urls (id, url) VALUES ($1, $2)", key, body.URL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao armazenar a URL no banco"})
 		return

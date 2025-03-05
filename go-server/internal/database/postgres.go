@@ -8,9 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func NewPostgresClient() (*pgxpool.Pool, error) {
-	secrets, _ := config.LoadConfig()
-
+func NewPostgresClient(secrets *config.Config) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(secrets.PostgresURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse database URL: %w", err)

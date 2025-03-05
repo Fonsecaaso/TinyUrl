@@ -12,9 +12,10 @@ docker-compose up --build
 
 ## Arquitetura Atual
 
-O código atual consiste em uma aplicação em angular, um server em go, um cache redis e um banco postgres.
+A arquitetura atual consiste em uma aplicação em angular, que se comunica com um gateway nginx que serve como loadbalancer, 2 servers em go, um cache redis e um banco postgres.
 
-![image](https://github.com/user-attachments/assets/beb05f45-9caa-402b-ba46-37d4f24c2193)
+![image](https://github.com/user-attachments/assets/24835408-6913-4130-a013-3a02f004b895)
+
 
 
 ## Fases do projeto

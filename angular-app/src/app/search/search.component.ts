@@ -14,7 +14,7 @@ export class SearchComponent implements OnInit {
   ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id'); // Captura o ID da URL
     if (id) {
-      this.http.get<{ value: string }>(`http://localhost:8080/${id}`).subscribe({
+      this.http.get<{ value: string }>(`http://localhost:80/${id}`).subscribe({
         next: (response) => {
           let url = response.value;
           

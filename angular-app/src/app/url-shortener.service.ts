@@ -14,7 +14,7 @@ interface ResolveResponse {
   providedIn: 'root'
 })
 export class UrlShortenerService {
-  private apiUrl = 'http://localhost:8080/'; // Defina um endpoint fixo
+  private apiUrl = 'http://localhost:80/'; // Defina um endpoint fixo
 
   constructor(private http: HttpClient) {}
 

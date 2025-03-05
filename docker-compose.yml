@@ -22,16 +22,29 @@ services:
     networks:
       - bridge
 
-  go-app:
-    container_name: go-app
+  api1:
+    container_name: api1
     build: 
       context: ./go-server
       dockerfile: Dockerfile
     depends_on:
       - redis
       - postgres
-    ports:
-      - "8080:8080"  
+    volumes:
+      - ./go-server:/app  
+    environment:
+      - GO_ENV=production  
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/mydatabase
+    networks:
+      - bridge
+  api2:
+    container_name: api2
+    build: 
+      context: ./go-server
+      dockerfile: Dockerfile
+    depends_on:
+      - redis
+      - postgres
     volumes:
       - ./go-server:/app  
     environment:
@@ -46,7 +59,7 @@ services:
       context: ./angular-app
       dockerfile: Dockerfile
     depends_on:
-      - go-app
+      - nginx
     ports:
       - "4200:4200"
     volumes:
@@ -69,6 +82,18 @@ services:
       - POSTGRES_DB=mydatabase
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    networks:
+      - bridge
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - api1
+      - api2
     networks:
       - bridge
 

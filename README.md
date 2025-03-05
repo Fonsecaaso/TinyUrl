@@ -17,6 +17,10 @@ docker-compose up --build
 - Um server backend feito em angular com as funcionalidades de inserir e ler tupla no redis.
 - E uma aplicação em angular com as funcionalidades de encurtar url via formulário e com a url retornada da criação redirecionar para o endereço inicial. Ambas aplicações orquestradas via docker-compose.
 
+#### Arquitetura
+![image](https://github.com/user-attachments/assets/beb05f45-9caa-402b-ba46-37d4f24c2193)
+
+
 
 ### 2. Autenticação, url personalizada, expiração de urls (default, personalizada e inteligente - de acordo com # de acessos)
 

@@ -34,7 +34,8 @@ services:
       - ./go-server:/app  
     environment:
       - GO_ENV=production  
-      - DATABASE_URL=postgres://postgres:password@postgres:5432/mydatabase
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/postgres
+    entrypoint: ["/app/scripts/migrate.sh"]
     networks:
       - bridge
   api2:
@@ -49,7 +50,8 @@ services:
       - ./go-server:/app  
     environment:
       - GO_ENV=production  
-      - DATABASE_URL=postgres://postgres:password@postgres:5432/mydatabase
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/postgres
+    entrypoint: ["/app/scripts/migrate.sh"]
     networks:
       - bridge
 
@@ -79,7 +81,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=mydatabase
+      - POSTGRES_DB=postgres
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:

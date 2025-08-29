@@ -1,6 +1,9 @@
 # Usar a imagem oficial do Go
 FROM golang:1.21
 
+# Instalar PostgreSQL client para migrations
+RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
+
 # Definir o diretório de trabalho no container
 WORKDIR /app
 

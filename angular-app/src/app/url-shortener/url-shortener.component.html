@@ -1,9 +1,73 @@
-<div class="container">
-    <input [(ngModel)]="urlInput" placeholder="Insira a URL" />
-    <button (click)="shorten()">Encurtar URL</button>
-  
-    <div *ngIf="shortenedUrl">
-      <p><strong>Compartilhe com seus amigos:</strong> localhost:4200/{{ shortenedUrl }}</p>
+<div class="url-shortener-container">
+  <div class="form-card">
+    <div class="input-group">
+      <input 
+        [(ngModel)]="urlInput" 
+        type="url"
+        placeholder="Cole sua URL aqui (ex: google.com)" 
+        class="url-input"
+        [class.error]="hasError"
+        (keyup.enter)="shorten()"
+        (input)="clearError()"
+      />
+      <button 
+        (click)="shorten()" 
+        class="shorten-btn"
+        [disabled]="isLoading"
+      >
+        <span *ngIf="!isLoading">Encurtar</span>
+        <div *ngIf="isLoading" class="loading-spinner"></div>
+      </button>
+    </div>
+    
+    <div *ngIf="errorMessage" class="error-message">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="15" y1="9" x2="9" y2="15"></line>
+        <line x1="9" y1="9" x2="15" y2="15"></line>
+      </svg>
+      {{ errorMessage }}
     </div>
   </div>
+
+  <div *ngIf="shortenedUrl" class="result-card">
+    <h3>URL Encurtada com Sucesso! 🎉</h3>
+    <div class="url-result">
+      <div class="shortened-url">
+        <input 
+          #shortUrlInput
+          [value]="getFullShortenedUrl()" 
+          readonly 
+          class="result-input"
+        >
+        <button 
+          (click)="copyToClipboard(shortUrlInput.value)" 
+          class="copy-btn"
+          [class.copied]="isCopied"
+        >
+          <svg *ngIf="!isCopied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <svg *ngIf="isCopied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <polyline points="20,6 9,17 4,12"></polyline>
+          </svg>
+          {{ isCopied ? 'Copiado!' : 'Copiar' }}
+        </button>
+      </div>
+      
+      <div class="original-url">
+        <span>URL Original:</span>
+        <a [href]="urlInput" target="_blank" rel="noopener">{{ getTruncatedUrl(urlInput) }}</a>
+      </div>
+    </div>
+    
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-value">{{urlInput.length - getFullShortenedUrl().length}}</span>
+        <span class="stat-label">caracteres economizados</span>
+      </div>
+    </div>
+  </div>
+</div>
   

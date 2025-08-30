@@ -44,8 +44,8 @@ var (
 
 const (
 	maxIDGenerationAttempts = 10
-	cacheTimeout           = 24 * time.Hour
-	dbTimeout              = 5 * time.Second
+	cacheTimeout            = 24 * time.Hour
+	dbTimeout               = 5 * time.Second
 )
 
 func CreateTinyUrl(c *gin.Context, redisClient *redis.Client, pgClient *pgxpool.Pool) {
@@ -128,23 +128,25 @@ func GetUrl(c *gin.Context, redisClient *redis.Client, pgClient *pgxpool.Pool) {
 		return
 	}
 
-	val, err := redisClient.Get(ctx, id).Result()
-	if err == nil {
-		logger.Info("URL found in cache", zap.String("id", id))
-		c.Header("Cache-Hit", "true")
-		c.JSON(http.StatusOK, URLResponse{
-			Message: "URL retrieved successfully",
-			URL:     val,
-		})
-		return
-	}
+	if redisClient != nil {
+		val, err := redisClient.Get(ctx, id).Result()
+		if err == nil {
+			logger.Info("URL found in cache", zap.String("id", id))
+			c.Header("Cache-Hit", "true")
+			c.JSON(http.StatusOK, URLResponse{
+				Message: "URL retrieved successfully",
+				URL:     val,
+			})
+			return
+		}
 
-	if err != redis.Nil {
-		logger.Warn("Cache error", zap.Error(err), zap.String("id", id))
+		if err != redis.Nil {
+			logger.Warn("Cache error", zap.Error(err), zap.String("id", id))
+		}
 	}
 
 	var url string
-	err = pgClient.QueryRow(ctx, "SELECT url FROM urls WHERE id = $1", id).Scan(&url)
+	err := pgClient.QueryRow(ctx, "SELECT url FROM urls WHERE id = $1", id).Scan(&url)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logger.Info("URL not found", zap.String("id", id))
@@ -162,8 +164,10 @@ func GetUrl(c *gin.Context, redisClient *redis.Client, pgClient *pgxpool.Pool) {
 		return
 	}
 
-	if err := redisClient.Set(ctx, id, url, cacheTimeout).Err(); err != nil {
-		logger.Warn("Failed to cache URL", zap.Error(err), zap.String("id", id))
+	if redisClient != nil {
+		if err := redisClient.Set(ctx, id, url, cacheTimeout).Err(); err != nil {
+			logger.Warn("Failed to cache URL", zap.Error(err), zap.String("id", id))
+		}
 	}
 
 	logger.Info("URL found in database", zap.String("id", id))

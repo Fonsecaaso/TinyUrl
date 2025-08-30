@@ -1,6 +1,8 @@
 package route
 
 import (
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -24,7 +26,7 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	r.Use(loggingMiddleware())
 	r.Use(rateLimiter.Middleware())
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:4200", "http://localhost:8080"},
+		AllowOrigins:     getAllowedOrigins(),
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization", requestIDHeader},
 		ExposeHeaders:    []string{"Content-Length", requestIDHeader, "Cache-Hit"},
@@ -82,13 +84,19 @@ func healthCheck(redisClient *redis.Client, pgClient *pgxpool.Pool) gin.HandlerF
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		
-		redisOK := redisClient.Ping(ctx).Err() == nil
+		var redisOK bool
+		if redisClient != nil {
+			redisOK = redisClient.Ping(ctx).Err() == nil
+		} else {
+			redisOK = false
+		}
+		
 		pgOK := pgClient.Ping(ctx) == nil
 		
 		status := "healthy"
 		code := 200
 		
-		if !redisOK || !pgOK {
+		if !pgOK {
 			status = "unhealthy"
 			code = 503
 		}
@@ -100,6 +108,30 @@ func healthCheck(redisClient *redis.Client, pgClient *pgxpool.Pool) gin.HandlerF
 			"timestamp": time.Now().Unix(),
 		})
 	}
+}
+
+func getAllowedOrigins() []string {
+	// Default origins for development
+	defaultOrigins := []string{"http://localhost:4200", "http://localhost:8080"}
+	
+	// Get production origins from environment variable
+	corsOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if corsOrigins == "" {
+		return defaultOrigins
+	}
+	
+	// Parse comma-separated origins
+	origins := strings.Split(corsOrigins, ",")
+	for i, origin := range origins {
+		origins[i] = strings.TrimSpace(origin)
+	}
+	
+	// Append development origins if in development mode
+	if os.Getenv("GO_ENV") != "production" {
+		origins = append(origins, defaultOrigins...)
+	}
+	
+	return origins
 }
 
 func generateRequestID() string {

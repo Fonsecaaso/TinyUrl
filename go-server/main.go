@@ -10,7 +10,7 @@ import (
 func main() {
 	logger := zap.Must(zap.NewProduction())
 	defer logger.Sync()
-	
+
 	zap.ReplaceGlobals(logger)
 
 	secrets, err := config.LoadConfig()
@@ -21,14 +21,6 @@ func main() {
 		)
 	}
 
-	redisClient, err := db.NewRedisClient(secrets)
-	if err != nil {
-		logger.Fatal("redis failed to initialize",
-			zap.Error(err),
-		)
-	}
-	logger.Info("redis connection established")
-
 	pgClient, err := db.NewPostgresClient(secrets)
 	if err != nil {
 		logger.Fatal("postgres failed to initialize",
@@ -36,6 +28,16 @@ func main() {
 		)
 	}
 	logger.Info("postgres connection established")
+
+	redisClient, err := db.NewRedisClient(secrets)
+	if err != nil {
+		logger.Warn("redis failed to initialize, continuing without cache",
+			zap.Error(err),
+		)
+		redisClient = nil
+	} else {
+		logger.Info("redis connection established")
+	}
 
 	r := route.SetupRouter(redisClient, pgClient)
 	logger.Info("starting server on :8080")

@@ -1,5 +1,3 @@
-version: '2'
-
 services:
   redis:
     image: redis:latest
@@ -28,14 +26,10 @@ services:
       context: ./go-server
       dockerfile: Dockerfile
     depends_on:
-      - redis
       - postgres
-    volumes:
-      - ./go-server:/app  
     environment:
       - GO_ENV=production  
       - DATABASE_URL=postgres://postgres:password@postgres:5432/postgres
-    entrypoint: ["/app/scripts/migrate.sh"]
     networks:
       - bridge
   api2:
@@ -44,14 +38,10 @@ services:
       context: ./go-server
       dockerfile: Dockerfile
     depends_on:
-      - redis
       - postgres
-    volumes:
-      - ./go-server:/app  
     environment:
       - GO_ENV=production  
       - DATABASE_URL=postgres://postgres:password@postgres:5432/postgres
-    entrypoint: ["/app/scripts/migrate.sh"]
     networks:
       - bridge
 

@@ -1,20 +1,24 @@
-# Usar a imagem oficial do Go
-FROM golang:1.21
+# Etapa 1: Build
+FROM golang:1.21 AS builder
 
-# Instalar PostgreSQL client para migrations
-RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
-
-# Definir o diretório de trabalho no container
 WORKDIR /app
 
-# Copiar o código fonte para o diretório de trabalho
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 
-# Baixar as dependências do Go
-RUN go mod tidy
+RUN go build -o server .
 
-# Expor a porta 8080
+# Etapa 2: Imagem final mínima
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+COPY --from=builder /app/server .
+COPY .env .
+
 EXPOSE 8080
 
-# Comando para rodar o app diretamente com go run
-CMD ["go", "run", "."]
+# O app vai ler variáveis de ambiente para conectar ao RDS
+CMD ["/app/server"]

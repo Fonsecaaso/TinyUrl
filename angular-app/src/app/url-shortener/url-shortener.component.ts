@@ -28,7 +28,7 @@ export class UrlShortenerComponent {
   
     this.urlShortenerService.shortenUrl(this.urlInput).subscribe({
       next: (response) => {
-        this.shortenedUrl = response["chave gerada"];
+        this.shortenedUrl = response["short_code"];
         this.isLoading = false;
         this.isCopied = false;
       },
@@ -74,7 +74,7 @@ export class UrlShortenerComponent {
   }
 
   getFullShortenedUrl(): string {
-    return `http://localhost:4200/${this.shortenedUrl}`;
+    return `localhost:4200/${this.shortenedUrl}`;
   }
 
   getTruncatedUrl(url: string): string {

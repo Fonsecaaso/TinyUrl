@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 interface ApiResponse {
-  "chave gerada": string; // Ajuste conforme a resposta da API
+  "short_code": string; // Ajuste conforme a resposta da API
 }
 
 interface ResolveResponse {

@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"time"
 
 	config "github.com/fonsecaaso/TinyUrl/go-server/config"
 	"github.com/go-redis/redis/v8"
@@ -10,9 +11,16 @@ import (
 
 func NewRedisClient(secrets *config.Config) (*redis.Client, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     secrets.RedisAddr, // Endereço do Redis (alterar se necessário)
-		Password: "",                // Sem senha (default)
-		DB:       0,                 // Seleciona o banco de dados 0
+		Addr:         secrets.RedisAddr,
+		Password:     "",
+		DB:           0,
+		PoolSize:     10,
+		MinIdleConns: 5,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+		PoolTimeout:  4 * time.Second,
+		IdleTimeout:  5 * time.Minute,
 	})
 
 	// Health check: Testa a conexão com o Redis

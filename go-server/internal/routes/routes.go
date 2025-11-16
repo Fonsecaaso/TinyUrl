@@ -19,14 +19,15 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	r := gin.New()
 
 	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
-	
+
 	r.Use(gin.LoggerWithWriter(gin.DefaultWriter, "/health"))
 	r.Use(gin.Recovery())
 	r.Use(requestIDMiddleware())
 	r.Use(loggingMiddleware())
 	r.Use(rateLimiter.Middleware())
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     getAllowedOrigins(),
+		// AllowOrigins:     getAllowedOrigins(),
+		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization", requestIDHeader},
 		ExposeHeaders:    []string{"Content-Length", requestIDHeader, "Cache-Hit"},
@@ -59,20 +60,20 @@ func loggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		requestID := c.GetString("requestID")
-		
+
 		logger := zap.L().With(
 			zap.String("request_id", requestID),
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
 			zap.String("ip", c.ClientIP()),
 		)
-		
+
 		c.Set("logger", logger)
 		c.Next()
-		
+
 		latency := time.Since(start)
 		status := c.Writer.Status()
-		
+
 		logger.Info("Request completed",
 			zap.Int("status", status),
 			zap.Duration("latency", latency),
@@ -83,24 +84,24 @@ func loggingMiddleware() gin.HandlerFunc {
 func healthCheck(redisClient *redis.Client, pgClient *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		
+
 		var redisOK bool
 		if redisClient != nil {
 			redisOK = redisClient.Ping(ctx).Err() == nil
 		} else {
 			redisOK = false
 		}
-		
+
 		pgOK := pgClient.Ping(ctx) == nil
-		
+
 		status := "healthy"
 		code := 200
-		
+
 		if !pgOK {
 			status = "unhealthy"
 			code = 503
 		}
-		
+
 		c.JSON(code, gin.H{
 			"status":    status,
 			"redis":     redisOK,
@@ -113,24 +114,24 @@ func healthCheck(redisClient *redis.Client, pgClient *pgxpool.Pool) gin.HandlerF
 func getAllowedOrigins() []string {
 	// Default origins for development
 	defaultOrigins := []string{"http://localhost:4200", "http://localhost:8080"}
-	
+
 	// Get production origins from environment variable
 	corsOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if corsOrigins == "" {
 		return defaultOrigins
 	}
-	
+
 	// Parse comma-separated origins
 	origins := strings.Split(corsOrigins, ",")
 	for i, origin := range origins {
 		origins[i] = strings.TrimSpace(origin)
 	}
-	
+
 	// Append development origins if in development mode
 	if os.Getenv("GO_ENV") != "production" {
 		origins = append(origins, defaultOrigins...)
 	}
-	
+
 	return origins
 }
 
@@ -138,10 +139,10 @@ func generateRequestID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
 	const length = 12
 	id := make([]byte, length)
-	
+
 	for i := 0; i < length; i++ {
 		id[i] = chars[time.Now().UnixNano()%int64(len(chars))]
 	}
-	
+
 	return string(id)
 }

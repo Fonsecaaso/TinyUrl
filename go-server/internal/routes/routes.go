@@ -18,6 +18,10 @@ import (
 func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine {
 	r := gin.New()
 
+	// Permite /api e /api/ funcionarem igual
+	r.RedirectTrailingSlash = true
+	r.RemoveExtraSlash = true
+
 	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
 
 	r.Use(gin.LoggerWithWriter(gin.DefaultWriter, "/health"))
@@ -25,8 +29,9 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	r.Use(requestIDMiddleware())
 	r.Use(loggingMiddleware())
 	r.Use(rateLimiter.Middleware())
+
+	// CORS
 	r.Use(cors.New(cors.Config{
-		// AllowOrigins:     getAllowedOrigins(),
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization", requestIDHeader},
@@ -35,9 +40,25 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 		MaxAge:           12 * time.Hour,
 	}))
 
-	r.GET("/health", healthCheck(redisClient, pgClient))
-	r.POST("/", func(c *gin.Context) { service.CreateTinyUrl(c, redisClient, pgClient) })
-	r.GET("/:id", func(c *gin.Context) { service.GetUrl(c, redisClient, pgClient) })
+	// OPTIONS
+	r.OPTIONS("/*any", func(c *gin.Context) {
+		c.Status(204)
+	})
+
+	// API
+	api := r.Group("/api")
+
+	api.GET("/health", healthCheck(redisClient, pgClient))
+
+	// POST /api e POST /api/
+	api.POST("/", func(c *gin.Context) {
+		service.CreateTinyUrl(c, redisClient, pgClient)
+	})
+
+	// GET /api/:id
+	api.GET("/:id", func(c *gin.Context) {
+		service.GetUrl(c, redisClient, pgClient)
+	})
 
 	return r
 }

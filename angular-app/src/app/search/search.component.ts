@@ -1,6 +1,7 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-search',
@@ -14,9 +15,9 @@ export class SearchComponent implements OnInit {
   ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id'); // Captura o ID da URL
     if (id) {
-      this.http.get<{ value: string }>(`http://localhost:80/${id}`).subscribe({
+      this.http.get<{ url: string }>(`${environment.apiBaseUrl}/${id}`).subscribe({
         next: (response) => {
-          let url = response.value;
+          let url = response.url;
           
           // Se a URL não começar com http ou https, adicionamos https://
           if (!/^https?:\/\//i.test(url)) {

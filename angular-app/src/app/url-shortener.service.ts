@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../environments/environment';
 
 interface ApiResponse {
   "short_code": string; // Ajuste conforme a resposta da API
@@ -14,7 +15,7 @@ interface ResolveResponse {
   providedIn: 'root'
 })
 export class UrlShortenerService {
-  private apiUrl = 'http://localhost:80/'; // Defina um endpoint fixo
+  private apiUrl = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) {}
 

@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { UrlShortenerService } from '../url-shortener.service';
+import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-url-shortener',
@@ -74,7 +75,7 @@ export class UrlShortenerComponent {
   }
 
   getFullShortenedUrl(): string {
-    return `localhost:4200/${this.shortenedUrl}`;
+    return `${environment.appDomain}/${this.shortenedUrl}`;
   }
 
   getTruncatedUrl(url: string): string {

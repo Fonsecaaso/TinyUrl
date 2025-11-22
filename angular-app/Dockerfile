@@ -1,20 +1,23 @@
-# Usa Node.js para rodar o Angular em desenvolvimento
-FROM node:20
+# Build Angular
+FROM node:20 AS builder
 
-# Define o diretório de trabalho dentro do container
 WORKDIR /app
 
-# Copia os arquivos de dependências primeiro para otimizar o cache
-COPY package.json package-lock.json ./
-
-# Instala as dependências do Angular
+COPY package*.json ./
 RUN npm install
 
-# Copia todo o código da aplicação
 COPY . .
+RUN npm run build
 
-# Expõe a porta 4200 para acesso ao Angular
-EXPOSE 4200
+# Serve com NGINX
+FROM nginx:alpine
 
-# Comando padrão para iniciar o servidor de desenvolvimento do Angular
-CMD ["ng", "serve", "--host", "0.0.0.0", "--port", "4200"]
+# Copia o build correto
+COPY --from=builder /app/dist/angular-app/browser /usr/share/nginx/html
+
+# Sobrescreve a config padrão do NGINX com seu arquivo
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

@@ -4,6 +4,10 @@ Encurtador de URLs desenvolvido com **Go** (backend), **Angular** (frontend), **
 
 🌐 **Acesse em produção**: [fonsecaaso.com](http://fonsecaaso.com)
 
+### screenshot em produção
+<img width="1952" height="1394" alt="image" src="https://github.com/user-attachments/assets/4fa12fbe-9a1d-46dd-9aa8-628f689cdb4c" />
+
+
 ## 🚀 Como Executar
 
 ### Requisitos

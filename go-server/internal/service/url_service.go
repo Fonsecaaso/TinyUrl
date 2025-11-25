@@ -6,196 +6,117 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
+
 	"go.uber.org/zap"
 )
 
-type Body struct {
-	URL string `json:"url" binding:"required"`
-}
-
-type URLResponse struct {
-	Message   string `json:"message"`
-	ShortCode string `json:"short_code,omitempty"`
-	URL       string `json:"url,omitempty"`
-}
-
-type ErrorResponse struct {
-	Error   string `json:"error"`
-	Code    string `json:"code,omitempty"`
-	Details string `json:"details,omitempty"`
-}
-
 var (
 	ErrInvalidURL      = errors.New("invalid URL format")
-	ErrURLNotFound     = errors.New("URL not found")
-	ErrDatabaseError   = errors.New("database error")
-	ErrCacheError      = errors.New("cache error")
 	ErrIDGenerationMax = errors.New("failed to generate unique ID after max attempts")
 )
 
 const (
 	maxIDGenerationAttempts = 10
-	cacheTimeout            = 24 * time.Hour
-	dbTimeout               = 5 * time.Second
+	idLength                = 6
 )
 
-func CreateTinyUrl(c *gin.Context, redisClient *redis.Client, pgClient *pgxpool.Pool) {
-	logger := zap.L().With(zap.String("handler", "CreateTinyUrl"))
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
-	defer cancel()
-
-	body := Body{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		logger.Warn("Invalid request body", zap.Error(err))
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid request format",
-			Code:  "INVALID_JSON",
-		})
-		return
-	}
-
-	if !isValidURL(body.URL) {
-		logger.Warn("Invalid URL provided", zap.String("url", body.URL))
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid URL format",
-			Code:  "INVALID_URL",
-		})
-		return
-	}
-
-	key, err := generateUniqueID(ctx, pgClient)
-	if err != nil {
-		logger.Error("Failed to generate unique ID", zap.Error(err))
-		if errors.Is(err, ErrIDGenerationMax) {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Error: "Service temporarily unavailable",
-				Code:  "ID_GENERATION_FAILED",
-			})
-		} else {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Error: "Database error",
-				Code:  "DB_ERROR",
-			})
-		}
-		return
-	}
-
-	_, err = pgClient.Exec(ctx, "INSERT INTO urls (id, url) VALUES ($1, $2)", key, body.URL)
-	if err != nil {
-		logger.Error("Failed to store URL", zap.Error(err), zap.String("id", key))
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Failed to store URL",
-			Code:  "STORAGE_ERROR",
-		})
-		return
-	}
-
-	logger.Info("URL shortened successfully", zap.String("id", key), zap.String("url", body.URL))
-	c.JSON(http.StatusCreated, URLResponse{
-		Message:   "URL shortened successfully",
-		ShortCode: key,
-	})
+// URLService handles business logic for URL operations
+type URLService struct {
+	repo   repository.URLRepository
+	logger *zap.Logger
 }
 
-func GetUrl(c *gin.Context, redisClient *redis.Client, pgClient *pgxpool.Pool) {
-	logger := zap.L().With(zap.String("handler", "GetUrl"))
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
-	defer cancel()
-
-	id := strings.TrimSpace(c.Param("id"))
-	if id == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "ID parameter is required",
-			Code:  "MISSING_ID",
-		})
-		return
+// NewURLService creates a new URLService
+func NewURLService(repo repository.URLRepository) *URLService {
+	return &URLService{
+		repo:   repo,
+		logger: zap.L().With(zap.String("component", "URLService")),
 	}
-
-	if !isValidID(id) {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid ID format",
-			Code:  "INVALID_ID",
-		})
-		return
-	}
-
-	if redisClient != nil {
-		val, err := redisClient.Get(ctx, id).Result()
-		if err == nil {
-			logger.Info("URL found in cache", zap.String("id", id))
-			c.Header("Cache-Hit", "true")
-			c.JSON(http.StatusOK, URLResponse{
-				Message: "URL retrieved successfully",
-				URL:     val,
-			})
-			return
-		}
-
-		if err != redis.Nil {
-			logger.Warn("Cache error", zap.Error(err), zap.String("id", id))
-		}
-	}
-
-	var url string
-	err := pgClient.QueryRow(ctx, "SELECT url FROM urls WHERE id = $1", id).Scan(&url)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			logger.Info("URL not found", zap.String("id", id))
-			c.JSON(http.StatusNotFound, ErrorResponse{
-				Error: "Short URL not found",
-				Code:  "URL_NOT_FOUND",
-			})
-			return
-		}
-		logger.Error("Database query error", zap.Error(err), zap.String("id", id))
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Database error",
-			Code:  "DB_ERROR",
-		})
-		return
-	}
-
-	if redisClient != nil {
-		if err := redisClient.Set(ctx, id, url, cacheTimeout).Err(); err != nil {
-			logger.Warn("Failed to cache URL", zap.Error(err), zap.String("id", id))
-		}
-	}
-
-	logger.Info("URL found in database", zap.String("id", id))
-	c.Header("Cache-Hit", "false")
-	c.JSON(http.StatusOK, URLResponse{
-		Message: "URL retrieved successfully",
-		URL:     url,
-	})
 }
 
-func generateUniqueID(ctx context.Context, pgClient *pgxpool.Pool) (string, error) {
+// ShortenURL creates a short URL for the given URL or returns existing one
+// Returns (shortCode, isNew, error) where isNew indicates if a new URL was created
+func (s *URLService) ShortenURL(ctx context.Context, rawURL string) (string, bool, error) {
+	// Validate URL
+	if !s.isValidURL(rawURL) {
+		s.logger.Warn("Invalid URL provided", zap.String("url", rawURL))
+		return "", false, ErrInvalidURL
+	}
+
+	// Normalize URL (add https:// if missing)
+	normalizedURL := rawURL
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		normalizedURL = "https://" + rawURL
+	}
+
+	// Generate unique ID
+	shortCode, err := s.generateUniqueID(ctx)
+	if err != nil {
+		s.logger.Error("Failed to generate unique ID", zap.Error(err))
+		return "", false, err
+	}
+
+	// Try to create or get existing URL
+	resultCode, isNew, err := s.repo.CreateOrGet(ctx, shortCode, normalizedURL)
+	if err != nil {
+		s.logger.Error("Failed to store URL", zap.Error(err), zap.String("id", shortCode))
+		return "", false, err
+	}
+
+	if isNew {
+		s.logger.Info("URL shortened successfully", zap.String("id", resultCode), zap.String("url", normalizedURL))
+	} else {
+		s.logger.Info("URL already exists, returning existing short code", zap.String("id", resultCode), zap.String("url", normalizedURL))
+	}
+
+	return resultCode, isNew, nil
+}
+
+// GetOriginalURL retrieves the original URL for a given short code
+func (s *URLService) GetOriginalURL(ctx context.Context, shortCode string) (string, error) {
+	// Validate short code format
+	if !s.isValidID(shortCode) {
+		s.logger.Warn("Invalid short code format", zap.String("shortCode", shortCode))
+		return "", errors.New("invalid short code format")
+	}
+
+	// Retrieve URL from repository
+	url, err := s.repo.FindByID(ctx, shortCode)
+	if err != nil {
+		if errors.Is(err, repository.ErrURLNotFound) {
+			s.logger.Info("URL not found", zap.String("shortCode", shortCode))
+			return "", repository.ErrURLNotFound
+		}
+		s.logger.Error("Failed to retrieve URL", zap.Error(err), zap.String("shortCode", shortCode))
+		return "", err
+	}
+
+	s.logger.Info("URL retrieved successfully", zap.String("shortCode", shortCode))
+	return url, nil
+}
+
+// generateUniqueID generates a unique short code
+func (s *URLService) generateUniqueID(ctx context.Context) (string, error) {
 	for attempt := 0; attempt < maxIDGenerationAttempts; attempt++ {
-		id := createID()
-		var count int
-		err := pgClient.QueryRow(ctx, "SELECT COUNT(*) FROM urls WHERE id = $1", id).Scan(&count)
+		id := s.createID()
+		exists, err := s.repo.IDExists(ctx, id)
 		if err != nil {
-			return "", fmt.Errorf("%w: %v", ErrDatabaseError, err)
+			return "", err
 		}
-		if count == 0 {
+		if !exists {
 			return id, nil
 		}
 	}
 	return "", ErrIDGenerationMax
 }
 
-func createID() string {
+// createID generates a random alphanumeric ID
+func (s *URLService) createID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	const idLength = 6
 	id := make([]byte, idLength)
 
 	for i := 0; i < idLength; i++ {
@@ -209,7 +130,8 @@ func createID() string {
 	return string(id)
 }
 
-func isValidURL(rawURL string) bool {
+// isValidURL validates URL format
+func (s *URLService) isValidURL(rawURL string) bool {
 	if rawURL == "" {
 		return false
 	}
@@ -226,12 +148,13 @@ func isValidURL(rawURL string) bool {
 	return parsed.Scheme != "" && parsed.Host != ""
 }
 
-func isValidID(id string) bool {
-	if len(id) != 6 {
+// isValidID validates short code format
+func (s *URLService) isValidID(id string) bool {
+	if len(id) != idLength {
 		return false
 	}
 	for _, char := range id {
-		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9')) {
+		if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') && (char < '0' || char > '9') {
 			return false
 		}
 	}

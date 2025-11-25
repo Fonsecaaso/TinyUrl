@@ -9,7 +9,9 @@ import (
 
 func main() {
 	logger := zap.Must(zap.NewProduction())
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 
 	zap.ReplaceGlobals(logger)
 

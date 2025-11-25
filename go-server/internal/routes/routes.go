@@ -11,12 +11,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/handler"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/middleware"
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/service"
 )
 
 func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine {
 	r := gin.New()
+
+	// Initialize layers
+	urlRepo := repository.NewPostgresURLRepository(pgClient, redisClient)
+	urlService := service.NewURLService(urlRepo)
+	urlHandler := handler.NewURLHandler(urlService)
 
 	// Permite /api e /api/ funcionarem igual
 	r.RedirectTrailingSlash = true
@@ -51,14 +58,10 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	api.GET("/health", healthCheck(redisClient, pgClient))
 
 	// POST /api e POST /api/
-	api.POST("/", func(c *gin.Context) {
-		service.CreateTinyUrl(c, redisClient, pgClient)
-	})
+	api.POST("/", urlHandler.CreateTinyURL)
 
 	// GET /api/:id
-	api.GET("/:id", func(c *gin.Context) {
-		service.GetUrl(c, redisClient, pgClient)
-	})
+	api.GET("/:id", urlHandler.GetURL)
 
 	return r
 }

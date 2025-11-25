@@ -26,7 +26,7 @@ func NewRedisClient(secrets *config.Config) (*redis.Client, error) {
 	// Health check: Testa a conexão com o Redis
 	ctx := context.Background()
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		rdb.Close()
+		_ = rdb.Close()
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 

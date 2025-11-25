@@ -1,79 +1,79 @@
 # TinyUrl
 
-Encurtador de URLs desenvolvido com **Go** (backend), **Angular** (frontend), **Redis** (cache) e **PostgreSQL** (banco de dados). O serviço oferece redirecionamentos rápidos, escalabilidade e alta performance com latência mínima.
+URL shortener developed with **Go** (backend), **Angular** (frontend), **Redis** (cache), and **PostgreSQL** (database). The service offers fast redirects, scalability, and high performance with minimal latency.
 
-🌐 **Acesse em produção**: [fonsecaaso.com](http://fonsecaaso.com)
+🌐 **Live production**: [fonsecaaso.com](http://fonsecaaso.com)
 
-### screenshot em produção
+### Production Screenshot
 <img width="1952" height="1394" alt="image" src="https://github.com/user-attachments/assets/4fa12fbe-9a1d-46dd-9aa8-628f689cdb4c" />
 
 
-## 🚀 Como Executar
+## 🚀 How to Run
 
-### Requisitos
+### Requirements
 - Docker
 - Docker Compose
 
-### Executando o Projeto
+### Running the Project
 
-Para rodar o projeto localmente:
+To run the project locally:
 
 ```bash
 docker-compose up --build
 ```
 
-A aplicação estará disponível em: `http://localhost:4200`
+The application will be available at: `http://localhost:4200`
 
-## 🏗️ Arquitetura
+## 🏗️ Architecture
 
-A arquitetura consiste em:
-- **Frontend**: Aplicação Angular
+The architecture consists of:
+- **Frontend**: Angular application
 - **Load Balancer**: Nginx Gateway
-- **Backend**: 2 servidores Go (escaláveis)
+- **Backend**: 2 Go servers (scalable)
 - **Cache**: Redis
-- **Banco de Dados**: PostgreSQL
+- **Database**: PostgreSQL
 
 ![image](https://github.com/user-attachments/assets/24835408-6913-4130-a013-3a02f004b895)
 
-## 📦 Deploy Manual
+## 📦 Manual Deployment
 
 ### Backend (Go Server)
 
-1. Build da imagem:
+1. Build the image:
 ```bash
 cd go-server
 docker build --platform linux/x86_64 -t tiny-url .
 ```
 
-2. Autenticação no AWS ECR:
+2. Authenticate with AWS ECR:
 ```bash
 aws ecr get-login-password --region us-east-1 --profile personal-account | \
   docker login --username AWS --password-stdin 173941740239.dkr.ecr.us-east-1.amazonaws.com
 ```
 
-3. Tag e push da imagem:
+3. Tag and push the image:
 ```bash
 docker tag tiny-url:latest 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url:latest
 docker push 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url:latest
 ```
 
-**Nota**: Certifique-se de que o Application Load Balancer, Task Definition e Target Group estão configurados no AWS ECS antes de criar o serviço.
+**Note**: Ensure that the Application Load Balancer, Task Definition, and Target Group are configured in AWS ECS before creating the service.
 
 ### Frontend (Angular)
 
-1. Build da imagem:
+1. Build the image:
 ```bash
 cd angular-app
 docker build --platform linux/x86_64 -t tiny-url-frontend .
 ```
 
-2. Autenticação no AWS ECR:
+2. Authenticate with AWS ECR:
 ```bash
 aws ecr get-login-password --region us-east-1 --profile personal-account | \
   docker login --username AWS --password-stdin 173941740239.dkr.ecr.us-east-1.amazonaws.com
 ```
 
-3. Tag e push da imagem:
+3. Tag and push the image:
 ```bash
 docker tag tiny-url-frontend:latest 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url-frontend:latest
 docker push 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url-frontend:latest
@@ -81,53 +81,53 @@ docker push 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url-frontend:lates
 
 
 
-## 🛣️ Roadmap do Projeto
+## 🛣️ Project Roadmap
 
-### ✅ Fase 1: MVP - Funcionalidades Básicas
+### ✅ Phase 1: MVP - Basic Features
 
-- ✅ Backend em Go com operações básicas de CRUD
-- ✅ Frontend Angular com formulário de encurtamento
-- ✅ Redirecionamento automático de URLs encurtadas
-- ✅ Integração com Redis para cache
-- ✅ Orquestração via Docker Compose
-- ✅ Rate limiting para proteção da API
-- ✅ Deploy em produção na AWS (disponível em [fonsecaaso.com](http://fonsecaaso.com))
+- ✅ Go backend with basic CRUD operations
+- ✅ Angular frontend with shortening form
+- ✅ Automatic redirect for shortened URLs
+- ✅ Redis integration for caching
+- ✅ Orchestration via Docker Compose
+- ✅ Rate limiting for API protection
+- ✅ Production deployment on AWS (available at [fonsecaaso.com](http://fonsecaaso.com))
 
-### 🔄 Fase 2: CI/CD
+### 🔄 Phase 2: CI/CD
 
-- [ ] Pipeline de integração contínua
-- [ ] Testes automatizados (unitários e integração)
-- [ ] Deploy automatizado para produção
-- [ ] Versionamento automático de releases
-- [ ] Rollback automatizado em caso de falhas
+- [ ] Continuous integration pipeline
+- [ ] Automated tests (unit and integration)
+- [ ] Automated production deployment
+- [ ] Automatic release versioning
+- [ ] Automated rollback on failures
 
-### 📊 Fase 3: Observabilidade
+### 📊 Phase 3: Observability
 
 **Prometheus + Grafana**:
-- [ ] Métricas de consumo de CPU e memória
-- [ ] Tempo de resposta da API (percentis p50, p95, p99)
+- [ ] CPU and memory consumption metrics
+- [ ] API response time metrics (p50, p95, p99 percentiles)
 
 **Elasticsearch + Kibana**:
-- [ ] Estatísticas de acessos às URLs
-- [ ] Análise de frequência e geografia
+- [ ] URL access statistics
+- [ ] Frequency and geographic analysis
 
 **OpenTelemetry**:
-- [ ] Tracing distribuído para identificação de gargalos
+- [ ] Distributed tracing for bottleneck identification
 
-### 🚀 Fase 4: Novas Features
+### 🚀 Phase 4: New Features
 
-**Autenticação e Gerenciamento**:
-- [ ] Sistema de autenticação (login e cadastro)
-- [ ] Autenticação JWT no frontend
-- [ ] Dashboard do usuário com histórico de URLs
+**Authentication and Management**:
+- [ ] Authentication system (login and signup)
+- [ ] JWT authentication in frontend
+- [ ] User dashboard with URL history
 
-**Analytics e Personalização**:
-- [ ] Analytics de uso das URLs (cliques, origem geográfica, dispositivos)
-- [ ] URLs personalizadas pelo usuário
-- [ ] URLs de uso único (single-use URLs)
-- [ ] Expiração de URLs configurável
-- [ ] Limpeza automática baseada em:
-  - URLs sem acesso por 48h
-  - Remoção das 30% URLs menos acessadas (diariamente)
+**Analytics and Customization**:
+- [ ] URL usage analytics (clicks, geographic origin, devices)
+- [ ] Custom URLs by user
+- [ ] Single-use URLs
+- [ ] Configurable URL expiration
+- [ ] Automatic cleanup based on:
+  - URLs without access for 48h
+  - Daily removal of the 30% least accessed URLs
 
 

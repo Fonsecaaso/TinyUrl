@@ -73,7 +73,9 @@ func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, id, url string)
 		r.logger.Error("Failed to start transaction", zap.Error(err))
 		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	// First, try to find existing URL
 	var existingID string

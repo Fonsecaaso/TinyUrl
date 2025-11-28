@@ -1,8 +1,6 @@
 package route
 
 import (
-	"os"
-	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -135,29 +133,29 @@ func healthCheck(redisClient *redis.Client, pgClient *pgxpool.Pool) gin.HandlerF
 	}
 }
 
-func getAllowedOrigins() []string {
-	// Default origins for development
-	defaultOrigins := []string{"http://localhost:4200", "http://localhost:8080"}
+// func getAllowedOrigins() []string {
+// 	// Default origins for development
+// 	defaultOrigins := []string{"http://localhost:4200", "http://localhost:8080"}
 
-	// Get production origins from environment variable
-	corsOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
-	if corsOrigins == "" {
-		return defaultOrigins
-	}
+// 	// Get production origins from environment variable
+// 	corsOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
+// 	if corsOrigins == "" {
+// 		return defaultOrigins
+// 	}
 
-	// Parse comma-separated origins
-	origins := strings.Split(corsOrigins, ",")
-	for i, origin := range origins {
-		origins[i] = strings.TrimSpace(origin)
-	}
+// 	// Parse comma-separated origins
+// 	origins := strings.Split(corsOrigins, ",")
+// 	for i, origin := range origins {
+// 		origins[i] = strings.TrimSpace(origin)
+// 	}
 
-	// Append development origins if in development mode
-	if os.Getenv("GO_ENV") != "production" {
-		origins = append(origins, defaultOrigins...)
-	}
+// 	// Append development origins if in development mode
+// 	if os.Getenv("GO_ENV") != "production" {
+// 		origins = append(origins, defaultOrigins...)
+// 	}
 
-	return origins
-}
+// 	return origins
+// }
 
 func generateRequestID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"

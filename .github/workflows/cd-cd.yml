@@ -1,4 +1,4 @@
-name: CI/CD Go API (ECR + ECS)
+name: CI/CD – Go API
 
 on:
   pull_request:
@@ -7,78 +7,94 @@ on:
     branches: [ main ]
 
 jobs:
-
-  ci:
-    name: Build and Test
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: '1.22'
 
-      - name: Install dependencies
-        working-directory: go-server
-        run: go mod download
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
 
-      # - name: Run tests
-      #   working-directory: go-server
-      #   run: go test ./... -cover
-
-
-  cd:
-    name: Build & Deploy to AWS
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    needs: ci   # só executa depois do CI ter passado
-
-    if: github.ref == 'refs/heads/main'   # só roda no merge na main
+    needs: lint
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build binary
+        run: |
+          cd go-server
+          go build ./...
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run tests
+        run: |
+          cd go-server
+          go test ./... -cover
+
+  deploy:
+    name: Deploy to AWS (ECR + ECS)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Login to ECR
-        id: login-ecr
+      - name: Docker login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build Docker image
-        working-directory: go-server
         run: |
+          cd go-server
           docker build --platform linux/x86_64 -t tiny-url .
 
       - name: Tag image
         run: |
-          docker tag \
-            tiny-url:latest \
-            173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url:latest
+          docker tag tiny-url:latest 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url:latest
 
-      - name: Push image
+      - name: Push image to ECR
         run: |
           docker push 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url:latest
 
-      - name: Render new ECS task definition
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: ecs-task.json     # seu arquivo local
-          container-name: tiny-url
-          image: 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url:latest
-
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: tiny-url-service
-          cluster: tiny-url-cluster
-          wait-for-service-stability: true
+      - name: Deploy on ECS
+        run: |
+          aws ecs update-service \
+            --cluster tiny-url-cluster \
+            --service tiny-url-service \
+            --force-new-deployment

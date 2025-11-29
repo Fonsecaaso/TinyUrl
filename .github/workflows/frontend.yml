@@ -3,14 +3,9 @@ name: Frontend CI/CD
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - 'angular-app/**'
-      - '.github/workflows/frontend.yml'
+    
   push:
     branches: [ main ]
-    paths:
-      - 'angular-app/**'
-      - '.github/workflows/frontend.yml'
 
 jobs:
   lint_frontend:

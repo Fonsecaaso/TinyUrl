@@ -3,17 +3,9 @@ name: Backend CI/CD
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - 'go-server/**'
-      - '.github/workflows/backend.yml'
-    paths-ignore:
-      - 'angular-app/**'
 
   push:
     branches: [ main ]
-    paths:
-      - 'go-server/**'
-      - '.github/workflows/backend.yml'
 
 jobs:
   lint_backend:

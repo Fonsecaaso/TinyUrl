@@ -4,7 +4,7 @@
       <input 
         [(ngModel)]="urlInput" 
         type="url"
-        placeholder="Cole sua URL aqui (ex: google.com)" 
+        placeholder="Paste your URL here (e.g., google.com)" 
         class="url-input"
         [class.error]="hasError"
         (keyup.enter)="shorten()"
@@ -15,7 +15,7 @@
         class="shorten-btn"
         [disabled]="isLoading"
       >
-        <span *ngIf="!isLoading">Encurtar</span>
+        <span *ngIf="!isLoading">Shorten</span>
         <div *ngIf="isLoading" class="loading-spinner"></div>
       </button>
     </div>
@@ -31,7 +31,7 @@
   </div>
 
   <div *ngIf="shortenedUrl" class="result-card">
-    <h3>URL Encurtada com Sucesso! 🎉</h3>
+    <h3>URL Successfully Shortened! 🎉</h3>
     <div class="url-result">
       <div class="shortened-url">
         <input 
@@ -52,12 +52,12 @@
           <svg *ngIf="isCopied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <polyline points="20,6 9,17 4,12"></polyline>
           </svg>
-          {{ isCopied ? 'Copiado!' : 'Copiar' }}
+          {{ isCopied ? 'Copied!' : 'Copy' }}
         </button>
       </div>
       
       <div class="original-url">
-        <span>URL Original:</span>
+        <span>Original URL:</span>
         <a [href]="urlInput" target="_blank" rel="noopener">{{ getTruncatedUrl(urlInput) }}</a>
       </div>
     </div>
@@ -65,7 +65,7 @@
     <div class="stats">
       <div class="stat">
         <span class="stat-value">{{urlInput.length - getFullShortenedUrl().length}}</span>
-        <span class="stat-label">caracteres economizados</span>
+        <span class="stat-label">characters saved</span>
       </div>
     </div>
   </div>

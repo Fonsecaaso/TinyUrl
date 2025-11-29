@@ -34,8 +34,8 @@ export class UrlShortenerComponent {
         this.isCopied = false;
       },
       error: (err) => {
-        console.error('Erro ao encurtar URL', err);
-        this.showError('Erro ao encurtar a URL. Tente novamente.');
+        console.error('Error shortening URL', err);
+        this.showError('Error shortening the URL. Please try again.');
         this.isLoading = false;
       },
     });
@@ -45,18 +45,18 @@ export class UrlShortenerComponent {
     const urlInput = this.urlInput.trim();
     
     if (!urlInput) {
-      this.showError('Por favor, insira uma URL.');
+      this.showError('Please enter a URL.');
       return false;
     }
 
-    // Verifica se é uma URL válida (aceita com ou sem protocolo)
+    // Check if it's a valid URL (accepts with or without protocol)
     const urlPattern = /^(https?:\/\/)?([\w-]+\.)+[\w-]+(\/[^\s]*)?$/;
     if (!urlPattern.test(urlInput)) {
-      this.showError('Por favor, insira uma URL válida (ex: google.com)');
+      this.showError('Please enter a valid URL (e.g., google.com)');
       return false;
     }
 
-    // Adiciona http:// se não tiver protocolo
+    // Add http:// if it doesn't have a protocol
     if (!urlInput.startsWith('http://') && !urlInput.startsWith('https://')) {
       this.urlInput = 'http://' + urlInput;
     }
@@ -87,13 +87,13 @@ export class UrlShortenerComponent {
       await navigator.clipboard.writeText(text);
       this.isCopied = true;
       
-      // Reset após 3 segundos
+      // Reset after 3 seconds
       setTimeout(() => {
         this.isCopied = false;
       }, 3000);
     } catch (err) {
-      console.error('Erro ao copiar para a área de transferência', err);
-      // Fallback para navegadores mais antigos
+      console.error('Error copying to clipboard', err);
+      // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = text;
       document.body.appendChild(textArea);

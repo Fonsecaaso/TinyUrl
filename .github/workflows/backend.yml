@@ -3,14 +3,9 @@ name: Backend CI/CD
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - 'go-server/**'
-      - '.github/workflows/backend.yml'
+
   push:
     branches: [ main ]
-    paths:
-      - 'go-server/**'
-      - '.github/workflows/backend.yml'
 
 jobs:
   lint_backend:
@@ -25,7 +20,7 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: GolangCI-Lint
+      - name: Run GolangCI-Lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
@@ -62,7 +57,7 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Test Suite
+      - name: Execute Test Suite
         run: |
           cd go-server
           go test ./... -cover
@@ -83,7 +78,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: ECR Login
+      - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build Docker Image
@@ -99,7 +94,7 @@ jobs:
         run: |
           docker push 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url:latest
 
-      - name: ECS Deployment
+      - name: Deploy to ECS
         run: |
           aws ecs update-service \
             --cluster tiny-url-cluster \

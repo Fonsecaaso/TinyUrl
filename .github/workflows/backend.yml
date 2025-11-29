@@ -6,6 +6,9 @@ on:
     paths:
       - 'go-server/**'
       - '.github/workflows/backend.yml'
+    paths-ignore:
+      - "frontend/**"
+
   push:
     branches: [ main ]
     paths:

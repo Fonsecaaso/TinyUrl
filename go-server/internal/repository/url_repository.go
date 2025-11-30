@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/model"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,9 +27,9 @@ const (
 
 // URLRepository defines the interface for URL data operations
 type URLRepository interface {
-	Create(ctx context.Context, id, url string) error
-	CreateOrGet(ctx context.Context, id, url string) (shortCode string, isNew bool, err error)
-	FindByID(ctx context.Context, id string) (string, error)
+	Create(ctx context.Context, url *model.URL) error
+	CreateOrGet(ctx context.Context, url *model.URL) (shortCode string, isNew bool, err error)
+	FindByID(ctx context.Context, id string) (*model.URL, error)
 	FindByURL(ctx context.Context, url string) (string, error)
 	IDExists(ctx context.Context, id string) (bool, error)
 }
@@ -49,13 +51,14 @@ func NewPostgresURLRepository(db *pgxpool.Pool, redisClient *redis.Client) *Post
 }
 
 // Create inserts a new URL mapping into the database
-func (r *PostgresURLRepository) Create(ctx context.Context, id, url string) error {
+func (r *PostgresURLRepository) Create(ctx context.Context, url *model.URL) error {
 	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
 	defer cancel()
 
-	_, err := r.db.Exec(ctx, "INSERT INTO urls (id, url) VALUES ($1, $2)", id, url)
+	query := `INSERT INTO urls (id, url, created_at) VALUES ($1, $2, $3)`
+	_, err := r.db.Exec(ctx, query, url.ID, url.OriginalURL, time.Now())
 	if err != nil {
-		r.logger.Error("Failed to insert URL", zap.Error(err), zap.String("id", id))
+		r.logger.Error("Failed to insert URL", zap.Error(err), zap.String("id", url.ID))
 		return fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
 
@@ -63,7 +66,7 @@ func (r *PostgresURLRepository) Create(ctx context.Context, id, url string) erro
 }
 
 // CreateOrGet atomically checks if URL exists and returns existing short code, or creates new one
-func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, id, url string) (string, bool, error) {
+func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, url *model.URL) (string, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
 	defer cancel()
 
@@ -79,7 +82,7 @@ func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, id, url string)
 
 	// First, try to find existing URL
 	var existingID string
-	err = tx.QueryRow(ctx, "SELECT id FROM urls WHERE url = $1 LIMIT 1", url).Scan(&existingID)
+	err = tx.QueryRow(ctx, "SELECT id FROM urls WHERE original_url = $1 LIMIT 1", url.OriginalURL).Scan(&existingID)
 
 	if err == nil {
 		// URL already exists, return existing short code
@@ -89,20 +92,21 @@ func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, id, url string)
 		}
 		r.logger.Info("URL already exists, returning existing short code",
 			zap.String("id", existingID),
-			zap.String("url", url))
+			zap.String("url", url.OriginalURL))
 		return existingID, false, nil
 	}
 
 	if !errors.Is(err, pgx.ErrNoRows) {
 		// Real error occurred
-		r.logger.Error("Database query error", zap.Error(err), zap.String("url", url))
+		r.logger.Error("Database query error", zap.Error(err), zap.String("url", url.OriginalURL))
 		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
 
 	// URL doesn't exist, insert new record
-	_, err = tx.Exec(ctx, "INSERT INTO urls (id, url) VALUES ($1, $2)", id, url)
+	query := `INSERT INTO urls (id, original_url, created_at) VALUES ($1, $2, $3)`
+	_, err = tx.Exec(ctx, query, url.ID, url.OriginalURL, time.Now())
 	if err != nil {
-		r.logger.Error("Failed to insert URL", zap.Error(err), zap.String("id", id))
+		r.logger.Error("Failed to insert URL", zap.Error(err), zap.String("id", url.ID))
 		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
 
@@ -111,12 +115,12 @@ func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, id, url string)
 		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
 
-	r.logger.Info("New URL created", zap.String("id", id), zap.String("url", url))
-	return id, true, nil
+	r.logger.Info("New URL created", zap.String("id", url.ID), zap.String("url", url.OriginalURL))
+	return url.ID, true, nil
 }
 
 // FindByID retrieves a URL by its short code, checking cache first
-func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (string, error) {
+func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (*model.URL, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
 	defer cancel()
 
@@ -125,7 +129,8 @@ func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (string
 		val, err := r.redisClient.Get(ctx, id).Result()
 		if err == nil {
 			r.logger.Debug("URL found in cache", zap.String("id", id))
-			return val, nil
+			// Cache only stores the URL string, so we create a minimal model
+			return &model.URL{ID: id, OriginalURL: val}, nil
 		}
 
 		if err != redis.Nil {
@@ -134,26 +139,27 @@ func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (string
 	}
 
 	// Query database
-	var url string
-	err := r.db.QueryRow(ctx, "SELECT url FROM urls WHERE id = $1", id).Scan(&url)
+	var urlModel model.URL
+	query := `SELECT id, original_url, created_at FROM urls WHERE id = $1`
+	err := r.db.QueryRow(ctx, query, id).Scan(&urlModel.ID, &urlModel.OriginalURL, &urlModel.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			r.logger.Debug("URL not found", zap.String("id", id))
-			return "", ErrURLNotFound
+			return nil, ErrURLNotFound
 		}
 		r.logger.Error("Database query error", zap.Error(err), zap.String("id", id))
-		return "", fmt.Errorf("%w: %v", ErrDatabaseError, err)
+		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
 
 	// Cache the result if Redis is available
 	if r.redisClient != nil {
-		if err := r.redisClient.Set(ctx, id, url, cacheTimeout).Err(); err != nil {
+		if err := r.redisClient.Set(ctx, id, urlModel.OriginalURL, cacheTimeout).Err(); err != nil {
 			r.logger.Warn("Failed to cache URL", zap.Error(err), zap.String("id", id))
 		}
 	}
 
 	r.logger.Debug("URL found in database", zap.String("id", id))
-	return url, nil
+	return &urlModel, nil
 }
 
 // FindByURL retrieves the short code for a given URL
@@ -162,7 +168,7 @@ func (r *PostgresURLRepository) FindByURL(ctx context.Context, url string) (stri
 	defer cancel()
 
 	var id string
-	err := r.db.QueryRow(ctx, "SELECT id FROM urls WHERE url = $1 LIMIT 1", url).Scan(&id)
+	err := r.db.QueryRow(ctx, "SELECT id FROM urls WHERE original_url = $1 LIMIT 1", url).Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			r.logger.Debug("URL not found", zap.String("url", url))

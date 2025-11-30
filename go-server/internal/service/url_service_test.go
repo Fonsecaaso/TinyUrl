@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/model"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -16,19 +17,22 @@ type MockURLRepository struct {
 	mock.Mock
 }
 
-func (m *MockURLRepository) Create(ctx context.Context, id, url string) error {
-	args := m.Called(ctx, id, url)
+func (m *MockURLRepository) Create(ctx context.Context, url *model.URL) error {
+	args := m.Called(ctx, url)
 	return args.Error(0)
 }
 
-func (m *MockURLRepository) CreateOrGet(ctx context.Context, id, url string) (string, bool, error) {
-	args := m.Called(ctx, id, url)
+func (m *MockURLRepository) CreateOrGet(ctx context.Context, url *model.URL) (string, bool, error) {
+	args := m.Called(ctx, url)
 	return args.String(0), args.Bool(1), args.Error(2)
 }
 
-func (m *MockURLRepository) FindByID(ctx context.Context, id string) (string, error) {
+func (m *MockURLRepository) FindByID(ctx context.Context, id string) (*model.URL, error) {
 	args := m.Called(ctx, id)
-	return args.String(0), args.Error(1)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.URL), args.Error(1)
 }
 
 func (m *MockURLRepository) FindByURL(ctx context.Context, url string) (string, error) {
@@ -72,7 +76,7 @@ func TestShortenURL_Success_NewURL(t *testing.T) {
 	mockRepo.On("IDExists", ctx, mock.AnythingOfType("string")).Return(false, nil)
 
 	// Mock CreateOrGet: returns new URL
-	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("string"), testURL).
+	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return(expectedShortCode, true, nil)
 
 	shortCode, isNew, err := service.ShortenURL(ctx, testURL)
@@ -94,7 +98,7 @@ func TestShortenURL_Success_ExistingURL(t *testing.T) {
 	mockRepo.On("IDExists", ctx, mock.AnythingOfType("string")).Return(false, nil)
 
 	// Mock CreateOrGet: returns existing URL
-	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("string"), testURL).
+	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return(existingShortCode, false, nil)
 
 	shortCode, isNew, err := service.ShortenURL(ctx, testURL)
@@ -131,11 +135,10 @@ func TestShortenURL_URLNormalization(t *testing.T) {
 	ctx := context.Background()
 
 	testURL := "example.com"
-	expectedNormalizedURL := "https://example.com"
 	expectedShortCode := "abc123"
 
 	mockRepo.On("IDExists", ctx, mock.AnythingOfType("string")).Return(false, nil)
-	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("string"), expectedNormalizedURL).
+	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return(expectedShortCode, true, nil)
 
 	shortCode, isNew, err := service.ShortenURL(ctx, testURL)
@@ -170,7 +173,7 @@ func TestShortenURL_RepositoryError(t *testing.T) {
 	dbError := errors.New("database connection failed")
 
 	mockRepo.On("IDExists", ctx, mock.AnythingOfType("string")).Return(false, nil)
-	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("string"), testURL).
+	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return("", false, dbError)
 
 	_, _, err := service.ShortenURL(ctx, testURL)
@@ -187,7 +190,11 @@ func TestGetOriginalURL_Success(t *testing.T) {
 	shortCode := "abc123"
 	expectedURL := "https://example.com"
 
-	mockRepo.On("FindByID", ctx, shortCode).Return(expectedURL, nil)
+	urlModel := &model.URL{
+		ID:          shortCode,
+		OriginalURL: expectedURL,
+	}
+	mockRepo.On("FindByID", ctx, shortCode).Return(urlModel, nil)
 
 	url, err := service.GetOriginalURL(ctx, shortCode)
 
@@ -225,7 +232,7 @@ func TestGetOriginalURL_NotFound(t *testing.T) {
 
 	shortCode := "abc123"
 
-	mockRepo.On("FindByID", ctx, shortCode).Return("", repository.ErrURLNotFound)
+	mockRepo.On("FindByID", ctx, shortCode).Return(nil, repository.ErrURLNotFound)
 
 	_, err := service.GetOriginalURL(ctx, shortCode)
 
@@ -240,7 +247,7 @@ func TestGetOriginalURL_RepositoryError(t *testing.T) {
 	shortCode := "abc123"
 	dbError := errors.New("database connection failed")
 
-	mockRepo.On("FindByID", ctx, shortCode).Return("", dbError)
+	mockRepo.On("FindByID", ctx, shortCode).Return(nil, dbError)
 
 	_, err := service.GetOriginalURL(ctx, shortCode)
 

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/model"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
 
 	"go.uber.org/zap"
@@ -60,8 +61,14 @@ func (s *URLService) ShortenURL(ctx context.Context, rawURL string) (string, boo
 		return "", false, err
 	}
 
+	// Create URL model
+	urlModel := &model.URL{
+		ID:          shortCode,
+		OriginalURL: normalizedURL,
+	}
+
 	// Try to create or get existing URL
-	resultCode, isNew, err := s.repo.CreateOrGet(ctx, shortCode, normalizedURL)
+	resultCode, isNew, err := s.repo.CreateOrGet(ctx, urlModel)
 	if err != nil {
 		s.logger.Error("Failed to store URL", zap.Error(err), zap.String("id", shortCode))
 		return "", false, err
@@ -85,7 +92,7 @@ func (s *URLService) GetOriginalURL(ctx context.Context, shortCode string) (stri
 	}
 
 	// Retrieve URL from repository
-	url, err := s.repo.FindByID(ctx, shortCode)
+	urlModel, err := s.repo.FindByID(ctx, shortCode)
 	if err != nil {
 		if errors.Is(err, repository.ErrURLNotFound) {
 			s.logger.Info("URL not found", zap.String("shortCode", shortCode))
@@ -96,7 +103,7 @@ func (s *URLService) GetOriginalURL(ctx context.Context, shortCode string) (stri
 	}
 
 	s.logger.Info("URL retrieved successfully", zap.String("shortCode", shortCode))
-	return url, nil
+	return urlModel.OriginalURL, nil
 }
 
 // generateUniqueID generates a unique short code

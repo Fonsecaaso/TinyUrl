@@ -5,7 +5,7 @@ URL shortener developed with **Go** (backend), **Angular** (frontend), **Redis**
 🌐 **Live production**: [fonsecaaso.com](http://fonsecaaso.com)
 
 ### Production Screenshot
-<img width="1952" height="1394" alt="image" src="https://github.com/user-attachments/assets/4fa12fbe-9a1d-46dd-9aa8-628f689cdb4c" />
+ <img src="https://github.com/user-attachments/assets/183ef8b4-bb7d-40ee-8b4e-9748324fdec6" width="800" />
 
 
 ## 🚀 How to Run

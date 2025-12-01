@@ -11,7 +11,6 @@ import (
 
 // Config representa as configurações da aplicação
 type Config struct {
-	PostgresURL      string
 	PostgresHost     string
 	PostgresPort     int
 	PostgresDB       string
@@ -19,6 +18,8 @@ type Config struct {
 	PostgresPassword string
 	PostgresSSLMode  string
 	RedisAddr        string
+	// PostgresURL is built internally from the individual parameters
+	PostgresURL string
 }
 
 // LoadConfig carrega as variáveis de ambiente e retorna uma estrutura Config
@@ -29,7 +30,6 @@ func LoadConfig() (*Config, error) {
 	}
 
 	config := &Config{
-		PostgresURL:      os.Getenv("POSTGRES_URL"),
 		PostgresHost:     os.Getenv("POSTGRES_HOST"),
 		PostgresDB:       os.Getenv("POSTGRES_DB"),
 		PostgresUser:     os.Getenv("POSTGRES_USER"),
@@ -40,7 +40,6 @@ func LoadConfig() (*Config, error) {
 
 	// Debug: Print all environment variables
 	fmt.Printf("🔍 DEBUG CONFIG:\n")
-	fmt.Printf("  POSTGRES_URL: '%s'\n", config.PostgresURL)
 	fmt.Printf("  POSTGRES_HOST: '%s'\n", config.PostgresHost)
 	fmt.Printf("  POSTGRES_DB: '%s'\n", config.PostgresDB)
 	fmt.Printf("  POSTGRES_USER: '%s'\n", config.PostgresUser)
@@ -59,14 +58,13 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// Validate database configuration
-	if config.PostgresURL == "" {
-		// If PostgresURL is not set, validate individual parameters
-		if config.PostgresHost == "" || config.PostgresUser == "" || config.PostgresDB == "" {
-			return nil, fmt.Errorf("either POSTGRES_URL or POSTGRES_HOST, POSTGRES_USER, and POSTGRES_DB must be set")
-		}
-		// Build PostgresURL from individual parameters
-		config.PostgresURL = buildPostgresURL(config)
+	if config.PostgresHost == "" || config.PostgresUser == "" || config.PostgresDB == "" {
+		return nil, fmt.Errorf("POSTGRES_HOST, POSTGRES_USER, and POSTGRES_DB must be set")
 	}
+
+	// Build PostgresURL from individual parameters
+	config.PostgresURL = buildPostgresURL(config)
+
 	if config.RedisAddr == "" {
 		return nil, fmt.Errorf("REDIS_ADDR not set")
 	}

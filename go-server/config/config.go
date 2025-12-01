@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -36,7 +37,16 @@ func LoadConfig() (*Config, error) {
 		PostgresSSLMode:  getEnvWithDefault("POSTGRES_SSLMODE", "prefer"),
 		RedisAddr:        os.Getenv("REDIS_ADDR"),
 	}
-	print(" CONFIG:\n\n", config)
+
+	// Debug: Print all environment variables
+	fmt.Printf("🔍 DEBUG CONFIG:\n")
+	fmt.Printf("  POSTGRES_URL: '%s'\n", config.PostgresURL)
+	fmt.Printf("  POSTGRES_HOST: '%s'\n", config.PostgresHost)
+	fmt.Printf("  POSTGRES_DB: '%s'\n", config.PostgresDB)
+	fmt.Printf("  POSTGRES_USER: '%s'\n", config.PostgresUser)
+	fmt.Printf("  POSTGRES_PASSWORD: '%s'\n", maskPassword(config.PostgresPassword))
+	fmt.Printf("  POSTGRES_SSLMODE: '%s'\n", config.PostgresSSLMode)
+	fmt.Printf("  REDIS_ADDR: '%s'\n", config.RedisAddr)
 	// Parse PostgreSQL port
 	if portStr := os.Getenv("POSTGRES_PORT"); portStr != "" {
 		port, err := strconv.Atoi(portStr)
@@ -72,6 +82,31 @@ func getEnvWithDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
+// maskPassword masks password for logging
+func maskPassword(password string) string {
+	if password == "" {
+		return "<empty>"
+	}
+	return "***"
+}
+
+// maskURLPassword masks password in connection URL
+func maskURLPassword(connURL string) string {
+	if connURL == "" {
+		return "<empty>"
+	}
+	// Simple masking: replace anything between :// and @
+	if idx := strings.Index(connURL, "://"); idx != -1 {
+		if idx2 := strings.Index(connURL[idx:], "@"); idx2 != -1 {
+			user := connURL[idx+3 : idx+idx2]
+			if pidx := strings.Index(user, ":"); pidx != -1 {
+				return connURL[:idx+3+pidx+1] + "***" + connURL[idx+idx2:]
+			}
+		}
+	}
+	return connURL
+}
+
 // buildPostgresURL constructs PostgreSQL connection URL from individual parameters
 func buildPostgresURL(config *Config) string {
 	password := ""
@@ -79,7 +114,7 @@ func buildPostgresURL(config *Config) string {
 		password = ":" + config.PostgresPassword
 	}
 
-	return fmt.Sprintf("postgres://%s%s@%s:%d/%s?sslmode=%s",
+	url := fmt.Sprintf("postgres://%s%s@%s:%d/%s?sslmode=%s",
 		config.PostgresUser,
 		password,
 		config.PostgresHost,
@@ -87,4 +122,7 @@ func buildPostgresURL(config *Config) string {
 		config.PostgresDB,
 		config.PostgresSSLMode,
 	)
+
+	fmt.Printf("🔧 Built PostgresURL: %s\n", maskURLPassword(url))
+	return url
 }

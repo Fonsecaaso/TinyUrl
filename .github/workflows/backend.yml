@@ -98,5 +98,5 @@ jobs:
         run: |
           aws ecs update-service \
             --cluster tiny-url-cluster \
-            --service tiny-url-task-service-79e0flhh \
+            --service tiny-url-task-service-qnzfovki \
             --force-new-deployment

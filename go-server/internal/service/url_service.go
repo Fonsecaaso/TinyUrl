@@ -38,7 +38,7 @@ func NewURLService(repo repository.URLRepository) *URLService {
 	}
 }
 
-func (s *URLService) ShortenURL(ctx context.Context, rawURL string) (string, bool, error) {
+func (s *URLService) ShortenURL(ctx context.Context, rawURL string, userId *uuid.UUID) (string, bool, error) {
 	if !s.isValidURL(rawURL) {
 		s.logger.Warn("Invalid URL provided", zap.String("url", rawURL))
 		return "", false, ErrInvalidURL
@@ -58,6 +58,7 @@ func (s *URLService) ShortenURL(ctx context.Context, rawURL string) (string, boo
 	urlModel := &model.URL{
 		ID:          shortCode,
 		OriginalURL: normalizedURL,
+		UserID:      userId,
 	}
 
 	resultCode, isNew, err := s.repo.CreateOrGet(ctx, urlModel)

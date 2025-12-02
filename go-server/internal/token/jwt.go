@@ -9,9 +9,8 @@ import (
 
 var secret = []byte("SUPER_SECRET_KEY")
 
-// CustomClaims define as claims customizadas do JWT
 type CustomClaims struct {
-	UserID uuid.UUID `json:"user_id"`
+	UserID *uuid.UUID `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
@@ -22,7 +21,7 @@ func GenerateToken(userID string) (string, error) {
 	}
 
 	claims := CustomClaims{
-		UserID: parsedUserID,
+		UserID: &parsedUserID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

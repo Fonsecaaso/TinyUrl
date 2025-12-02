@@ -8,13 +8,15 @@ import (
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/middleware"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/service"
+	"github.com/google/uuid"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 type CreateURLRequest struct {
-	URL string `json:"url" binding:"required"`
+	URL    string     `json:"url" binding:"required"`
+	UserID *uuid.UUID `json:"user_id,omitempty"`
 }
 
 type URLResponse struct {
@@ -42,6 +44,8 @@ func NewURLHandler(service *service.URLService) *URLHandler {
 }
 
 func (h *URLHandler) CreateTinyURL(c *gin.Context) {
+	userID := middleware.GetUserIDFromContext(c)
+
 	var req CreateURLRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", zap.Error(err))
@@ -52,7 +56,7 @@ func (h *URLHandler) CreateTinyURL(c *gin.Context) {
 		return
 	}
 
-	shortCode, isNew, err := h.service.ShortenURL(c.Request.Context(), req.URL)
+	shortCode, isNew, err := h.service.ShortenURL(c.Request.Context(), req.URL, userID)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -94,17 +98,16 @@ func (h *URLHandler) GetURL(c *gin.Context) {
 }
 
 func (h *URLHandler) GetUserURLs(c *gin.Context) {
-	userID, err := middleware.GetUserIDFromContext(c)
-	if err != nil {
-		h.logger.Warn("Failed to extract user ID from context", zap.Error(err))
+	userID := middleware.GetUserIDFromContext(c)
+	if userID == nil {
 		c.JSON(http.StatusUnauthorized, ErrorResponse{
-			Error: "Unauthorized access",
-			Code:  "UNAUTHORIZED",
+			Error: "User ID not found in context",
+			Code:  "MISSING_USER_ID",
 		})
 		return
 	}
 
-	urls, err := h.service.GetUserURLs(c.Request.Context(), userID)
+	urls, err := h.service.GetUserURLs(c.Request.Context(), *userID)
 	if err != nil {
 		h.handleError(c, err)
 		return

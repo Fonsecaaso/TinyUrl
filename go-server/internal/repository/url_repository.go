@@ -96,8 +96,8 @@ func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, url *model.URL)
 		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
 
-	query := `INSERT INTO urls (id, original_url, created_at) VALUES ($1, $2, $3)`
-	_, err = tx.Exec(ctx, query, url.ID, url.OriginalURL, time.Now())
+	query := `INSERT INTO urls (id, original_url, created_at, user_id) VALUES ($1, $2, $3, $4)`
+	_, err = tx.Exec(ctx, query, url.ID, url.OriginalURL, time.Now(), url.UserID)
 	if err != nil {
 		r.logger.Error("Failed to insert URL", zap.Error(err), zap.String("id", url.ID))
 		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)

@@ -22,7 +22,6 @@ var (
 	ErrInvalidUserIDKey = errors.New("user_id in context is not a valid UUID")
 )
 
-// AuthMiddleware é o middleware Gin para validar JWT e armazenar claims
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		auth := c.GetHeader("Authorization")
@@ -47,7 +46,6 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Armazena as claims completas e o user_id no contexto
 		c.Set(claimsKey, claims)
 		c.Set(userIDKey, claims.UserID)
 
@@ -55,22 +53,22 @@ func AuthMiddleware() gin.HandlerFunc {
 	}
 }
 
-// GetUserIDFromContext extrai o user_id do contexto de forma type-safe
-func GetUserIDFromContext(c *gin.Context) (uuid.UUID, error) {
-	value, exists := c.Get(userIDKey)
-	if !exists {
-		return uuid.Nil, ErrMissingUserID
+func GetUserIDFromContext(c *gin.Context) *uuid.UUID {
+	auth := c.GetHeader("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		return nil
 	}
 
-	userID, ok := value.(uuid.UUID)
-	if !ok {
-		return uuid.Nil, ErrInvalidUserIDKey
+	tokenStr := strings.TrimPrefix(auth, "Bearer ")
+
+	claims, err := token.ValidateToken(tokenStr)
+	if err != nil {
+		return nil
 	}
 
-	return userID, nil
+	return claims.UserID
 }
 
-// GetClaimsFromContext extrai as claims completas do contexto
 func GetClaimsFromContext(c *gin.Context) (*token.CustomClaims, error) {
 	value, exists := c.Get(claimsKey)
 	if !exists {

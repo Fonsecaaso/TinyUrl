@@ -88,7 +88,7 @@ func TestShortenURL_Success_NewURL(t *testing.T) {
 	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return(expectedShortCode, true, nil)
 
-	shortCode, isNew, err := service.ShortenURL(ctx, testURL)
+	shortCode, isNew, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedShortCode, shortCode)
@@ -110,7 +110,7 @@ func TestShortenURL_Success_ExistingURL(t *testing.T) {
 	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return(existingShortCode, false, nil)
 
-	shortCode, isNew, err := service.ShortenURL(ctx, testURL)
+	shortCode, isNew, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, existingShortCode, shortCode)
@@ -133,7 +133,7 @@ func TestShortenURL_InvalidURL(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := service.ShortenURL(ctx, tc.url)
+			_, _, err := service.ShortenURL(ctx, tc.url, nil)
 			assert.ErrorIs(t, err, ErrInvalidURL)
 		})
 	}
@@ -150,7 +150,7 @@ func TestShortenURL_URLNormalization(t *testing.T) {
 	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return(expectedShortCode, true, nil)
 
-	shortCode, isNew, err := service.ShortenURL(ctx, testURL)
+	shortCode, isNew, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedShortCode, shortCode)
@@ -168,7 +168,7 @@ func TestShortenURL_IDGenerationFailure(t *testing.T) {
 	mockRepo.On("IDExists", ctx, mock.AnythingOfType("string")).
 		Return(true, nil).Times(maxIDGenerationAttempts)
 
-	_, _, err := service.ShortenURL(ctx, testURL)
+	_, _, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.ErrorIs(t, err, ErrIDGenerationMax)
 	mockRepo.AssertExpectations(t)
@@ -185,7 +185,7 @@ func TestShortenURL_RepositoryError(t *testing.T) {
 	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return("", false, dbError)
 
-	_, _, err := service.ShortenURL(ctx, testURL)
+	_, _, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.Error(t, err)
 	assert.Equal(t, dbError, err)

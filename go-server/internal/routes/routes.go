@@ -18,10 +18,12 @@ import (
 func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine {
 	r := gin.New()
 
-	// Initialize layers
 	urlRepo := repository.NewPostgresURLRepository(pgClient, redisClient)
+	userRepo := repository.NewUserRepository(pgClient)
 	urlService := service.NewURLService(urlRepo)
+	authService := service.NewAuthService(userRepo)
 	urlHandler := handler.NewURLHandler(urlService)
+	authHandler := handler.NewAuthHandler(authService)
 
 	// Permite /api e /api/ funcionarem igual
 	r.RedirectTrailingSlash = true
@@ -35,7 +37,6 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	r.Use(loggingMiddleware())
 	r.Use(rateLimiter.Middleware())
 
-	// CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
@@ -45,7 +46,6 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// OPTIONS
 	r.OPTIONS("/*any", func(c *gin.Context) {
 		c.Status(204)
 	})
@@ -54,12 +54,10 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	api := r.Group("/api")
 
 	api.GET("/health", healthCheck(redisClient, pgClient))
-
-	// POST /api e POST /api/
 	api.POST("/", urlHandler.CreateTinyURL)
-
-	// GET /api/:id
 	api.GET("/:id", urlHandler.GetURL)
+	api.POST("/register", authHandler.Register)
+	api.POST("/login", authHandler.Login)
 
 	return r
 }

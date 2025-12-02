@@ -11,6 +11,7 @@ import (
 
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/model"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
+	"github.com/google/uuid"
 
 	"go.uber.org/zap"
 )
@@ -25,13 +26,11 @@ const (
 	idLength                = 6
 )
 
-// URLService handles business logic for URL operations
 type URLService struct {
 	repo   repository.URLRepository
 	logger *zap.Logger
 }
 
-// NewURLService creates a new URLService
 func NewURLService(repo repository.URLRepository) *URLService {
 	return &URLService{
 		repo:   repo,
@@ -39,35 +38,28 @@ func NewURLService(repo repository.URLRepository) *URLService {
 	}
 }
 
-// ShortenURL creates a short URL for the given URL or returns existing one
-// Returns (shortCode, isNew, error) where isNew indicates if a new URL was created
 func (s *URLService) ShortenURL(ctx context.Context, rawURL string) (string, bool, error) {
-	// Validate URL
 	if !s.isValidURL(rawURL) {
 		s.logger.Warn("Invalid URL provided", zap.String("url", rawURL))
 		return "", false, ErrInvalidURL
 	}
 
-	// Normalize URL (add https:// if missing)
 	normalizedURL := rawURL
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 		normalizedURL = "https://" + rawURL
 	}
 
-	// Generate unique ID
 	shortCode, err := s.generateUniqueID(ctx)
 	if err != nil {
 		s.logger.Error("Failed to generate unique ID", zap.Error(err))
 		return "", false, err
 	}
 
-	// Create URL model
 	urlModel := &model.URL{
 		ID:          shortCode,
 		OriginalURL: normalizedURL,
 	}
 
-	// Try to create or get existing URL
 	resultCode, isNew, err := s.repo.CreateOrGet(ctx, urlModel)
 	if err != nil {
 		s.logger.Error("Failed to store URL", zap.Error(err), zap.String("id", shortCode))
@@ -83,15 +75,12 @@ func (s *URLService) ShortenURL(ctx context.Context, rawURL string) (string, boo
 	return resultCode, isNew, nil
 }
 
-// GetOriginalURL retrieves the original URL for a given short code
 func (s *URLService) GetOriginalURL(ctx context.Context, shortCode string) (string, error) {
-	// Validate short code format
 	if !s.isValidID(shortCode) {
 		s.logger.Warn("Invalid short code format", zap.String("shortCode", shortCode))
 		return "", errors.New("invalid short code format")
 	}
 
-	// Retrieve URL from repository
 	urlModel, err := s.repo.FindByID(ctx, shortCode)
 	if err != nil {
 		if errors.Is(err, repository.ErrURLNotFound) {
@@ -106,7 +95,17 @@ func (s *URLService) GetOriginalURL(ctx context.Context, shortCode string) (stri
 	return urlModel.OriginalURL, nil
 }
 
-// generateUniqueID generates a unique short code
+func (s *URLService) GetUserURLs(ctx context.Context, userID uuid.UUID) ([]model.URL, error) {
+	urls, err := s.repo.GetUserURLs(ctx, userID)
+	if err != nil {
+		s.logger.Error("Failed to retrieve user URLs", zap.Error(err), zap.String("userID", userID.String()))
+		return nil, err
+	}
+
+	s.logger.Info("User URLs retrieved successfully", zap.String("userID", userID.String()), zap.Int("count", len(urls)))
+	return urls, nil
+}
+
 func (s *URLService) generateUniqueID(ctx context.Context) (string, error) {
 	for attempt := 0; attempt < maxIDGenerationAttempts; attempt++ {
 		id := s.createID()
@@ -121,7 +120,6 @@ func (s *URLService) generateUniqueID(ctx context.Context) (string, error) {
 	return "", ErrIDGenerationMax
 }
 
-// createID generates a random alphanumeric ID
 func (s *URLService) createID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	id := make([]byte, idLength)
@@ -137,7 +135,6 @@ func (s *URLService) createID() string {
 	return string(id)
 }
 
-// isValidURL validates URL format
 func (s *URLService) isValidURL(rawURL string) bool {
 	if rawURL == "" {
 		return false
@@ -155,7 +152,6 @@ func (s *URLService) isValidURL(rawURL string) bool {
 	return parsed.Scheme != "" && parsed.Host != ""
 }
 
-// isValidID validates short code format
 func (s *URLService) isValidID(id string) bool {
 	if len(id) != idLength {
 		return false

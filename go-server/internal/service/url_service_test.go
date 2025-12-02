@@ -7,6 +7,7 @@ import (
 
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/model"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
@@ -43,6 +44,14 @@ func (m *MockURLRepository) FindByURL(ctx context.Context, url string) (string, 
 func (m *MockURLRepository) IDExists(ctx context.Context, id string) (bool, error) {
 	args := m.Called(ctx, id)
 	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockURLRepository) GetUserURLs(ctx context.Context, userId uuid.UUID) ([]model.URL, error) {
+	args := m.Called(ctx, userId)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]model.URL), args.Error(1)
 }
 
 func setupService(t *testing.T) (*URLService, *MockURLRepository) {
@@ -326,8 +335,8 @@ func TestCreateID(t *testing.T) {
 		for _, char := range id {
 			assert.True(t,
 				(char >= 'a' && char <= 'z') ||
-				(char >= 'A' && char <= 'Z') ||
-				(char >= '0' && char <= '9'),
+					(char >= 'A' && char <= 'Z') ||
+					(char >= '0' && char <= '9'),
 				"ID contains invalid character: %c", char,
 			)
 		}

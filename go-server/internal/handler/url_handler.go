@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/middleware"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/service"
 
@@ -28,13 +29,11 @@ type ErrorResponse struct {
 	Details string `json:"details,omitempty"`
 }
 
-// URLHandler handles HTTP requests for URL operations
 type URLHandler struct {
 	service *service.URLService
 	logger  *zap.Logger
 }
 
-// NewURLHandler creates a new URLHandler
 func NewURLHandler(service *service.URLService) *URLHandler {
 	return &URLHandler{
 		service: service,
@@ -42,7 +41,6 @@ func NewURLHandler(service *service.URLService) *URLHandler {
 	}
 }
 
-// CreateTinyURL handles POST /api/shorten requests
 func (h *URLHandler) CreateTinyURL(c *gin.Context) {
 	var req CreateURLRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -73,7 +71,6 @@ func (h *URLHandler) CreateTinyURL(c *gin.Context) {
 	}
 }
 
-// GetURL handles GET /api/shorten/:id requests
 func (h *URLHandler) GetURL(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	if id == "" {
@@ -96,7 +93,29 @@ func (h *URLHandler) GetURL(c *gin.Context) {
 	})
 }
 
-// handleError maps service errors to HTTP responses
+func (h *URLHandler) GetUserURLs(c *gin.Context) {
+	userID, err := middleware.GetUserIDFromContext(c)
+	if err != nil {
+		h.logger.Warn("Failed to extract user ID from context", zap.Error(err))
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error: "Unauthorized access",
+			Code:  "UNAUTHORIZED",
+		})
+		return
+	}
+
+	urls, err := h.service.GetUserURLs(c.Request.Context(), userID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "User URLs retrieved successfully",
+		"urls":    urls,
+	})
+}
+
 func (h *URLHandler) handleError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrInvalidURL):

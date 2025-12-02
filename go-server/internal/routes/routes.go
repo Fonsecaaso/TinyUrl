@@ -59,6 +59,13 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	api.POST("/register", authHandler.Register)
 	api.POST("/login", authHandler.Login)
 
+	// Rotas protegidas (requerem autenticação)
+	protected := api.Group("/user")
+	protected.Use(middleware.AuthMiddleware())
+	{
+		protected.GET("/urls", urlHandler.GetUserURLs)
+	}
+
 	return r
 }
 

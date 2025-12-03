@@ -1,17 +1,22 @@
 <div class="url-shortener-container">
+  <div class="hero">
+    <h2>Shorten your URLs easily</h2>
+    <p>Transform long links into short URLs and share them</p>
+  </div>
+
   <div class="form-card">
     <div class="input-group">
-      <input 
-        [(ngModel)]="urlInput" 
+      <input
+        [(ngModel)]="urlInput"
         type="url"
-        placeholder="Paste your URL here (e.g., google.com)" 
+        placeholder="Paste your URL here (e.g., google.com)"
         class="url-input"
         [class.error]="hasError"
         (keyup.enter)="shorten()"
         (input)="clearError()"
       />
-      <button 
-        (click)="shorten()" 
+      <button
+        (click)="shorten()"
         class="shorten-btn"
         [disabled]="isLoading"
       >
@@ -19,7 +24,7 @@
         <div *ngIf="isLoading" class="loading-spinner"></div>
       </button>
     </div>
-    
+
     <div *ngIf="errorMessage" class="error-message">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <circle cx="12" cy="12" r="10"></circle>
@@ -31,17 +36,17 @@
   </div>
 
   <div *ngIf="shortenedUrl" class="result-card">
-    <h3>URL Successfully Shortened! 🎉</h3>
+    <h3>URL Successfully Shortened!</h3>
     <div class="url-result">
       <div class="shortened-url">
-        <input 
+        <input
           #shortUrlInput
-          [value]="getFullShortenedUrl()" 
-          readonly 
+          [value]="getFullShortenedUrl()"
+          readonly
           class="result-input"
         >
-        <button 
-          (click)="copyToClipboard(shortUrlInput.value)" 
+        <button
+          (click)="copyToClipboard(shortUrlInput.value)"
           class="copy-btn"
           [class.copied]="isCopied"
         >
@@ -55,13 +60,13 @@
           {{ isCopied ? 'Copied!' : 'Copy' }}
         </button>
       </div>
-      
+
       <div class="original-url">
         <span>Original URL:</span>
         <a [href]="urlInput" target="_blank" rel="noopener">{{ getTruncatedUrl(urlInput) }}</a>
       </div>
     </div>
-    
+
     <div class="stats">
       <div class="stat">
         <span class="stat-value">{{urlInput.length - getFullShortenedUrl().length}}</span>
@@ -69,5 +74,9 @@
       </div>
     </div>
   </div>
+
+  <footer class="footer">
+    <p>© 2024 TinyURL - Simplifying your links</p>
+  </footer>
 </div>
   

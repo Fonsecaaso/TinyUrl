@@ -33,30 +33,29 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 
 	r.Use(gin.LoggerWithWriter(gin.DefaultWriter, "/health"))
 	r.Use(gin.Recovery())
-	r.Use(requestIDMiddleware())
-	r.Use(loggingMiddleware())
-	r.Use(rateLimiter.Middleware())
 
+	// CORS must be first to ensure all responses have proper headers
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
-		AllowHeaders:     []string{"Content-Type", "Authorization", requestIDHeader},
+		AllowHeaders:     []string{"Content-Type", "Authorization", requestIDHeader, "Origin", "Accept"},
 		ExposeHeaders:    []string{"Content-Length", requestIDHeader, "Cache-Hit"},
-		AllowCredentials: false,
+		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
-	r.OPTIONS("/*any", func(c *gin.Context) {
-		c.Status(204)
-	})
+	r.Use(requestIDMiddleware())
+	r.Use(loggingMiddleware())
+	r.Use(rateLimiter.Middleware())
 
 	// API
 	api := r.Group("/api")
 
 	api.GET("/health", healthCheck(redisClient, pgClient))
 	api.POST("/", urlHandler.CreateTinyURL)
+	api.POST("", urlHandler.CreateTinyURL)
 	api.GET("/:id", urlHandler.GetURL)
-	api.POST("/register", authHandler.Register)
+	api.POST("/signup", authHandler.Register)
 	api.POST("/login", authHandler.Login)
 
 	// Rotas protegidas (requerem autenticação)

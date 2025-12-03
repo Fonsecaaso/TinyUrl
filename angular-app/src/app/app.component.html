@@ -1,25 +1,26 @@
 <div class="app-container">
   <header class="header">
-    <div class="logo">
+    <div class="logo" routerLink="/" style="cursor: pointer;">
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       <h1>TinyURL</h1>
     </div>
+
+    <nav class="nav">
+      <ng-container *ngIf="currentUser$ | async as user; else notLoggedIn">
+        <span class="user-email">{{ user.email }}</span>
+        <button routerLink="/dashboard" class="btn-nav">My Links</button>
+        <button (click)="logout()" class="btn-logout">Logout</button>
+      </ng-container>
+      <ng-template #notLoggedIn>
+        <button routerLink="/login" class="btn-nav">Sign In</button>
+        <button routerLink="/signup" class="btn-primary">Sign Up</button>
+      </ng-template>
+    </nav>
   </header>
 
   <main class="main">
-    <div class="hero">
-      <h2>Shorten your URLs easily</h2>
-      <p>Transform long links into short URLs and share them</p>
-    </div>
-    
-    <app-url-shortener></app-url-shortener>
-    
-    <footer class="footer">
-      <p>© 2024 TinyURL - Simplifying your links</p>
-    </footer>
+    <router-outlet></router-outlet>
   </main>
 </div>
-
-<router-outlet></router-outlet>

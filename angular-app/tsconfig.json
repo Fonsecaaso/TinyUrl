@@ -14,7 +14,6 @@
     "declaration": false,
     "experimentalDecorators": true,
     "moduleResolution": "bundler",
-    "ignoreDeprecations": "6.0",
     "importHelpers": true,
     "target": "ES2022",
     "module": "ES2022",

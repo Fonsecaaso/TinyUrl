@@ -35,14 +35,20 @@ func NewRateLimiter(requestsPerWindow int, window time.Duration) *RateLimiter {
 
 func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip rate limiting for CORS preflight requests
+		if c.Request.Method == http.MethodOptions {
+			c.Next()
+			return
+		}
+
 		clientIP := c.ClientIP()
-		
+
 		if !rl.allow(clientIP) {
 			zap.L().Warn("Rate limit exceeded",
 				zap.String("ip", clientIP),
 				zap.String("path", c.Request.URL.Path),
 			)
-			
+
 			c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", rl.rate))
 			c.Header("X-RateLimit-Window", rl.window.String())
 			c.JSON(http.StatusTooManyRequests, gin.H{
@@ -53,7 +59,7 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		
+
 		c.Next()
 	}
 }

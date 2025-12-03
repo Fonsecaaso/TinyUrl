@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/model"
+	"github.com/google/uuid"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5"
@@ -25,23 +26,21 @@ const (
 	dbTimeout    = 5 * time.Second
 )
 
-// URLRepository defines the interface for URL data operations
 type URLRepository interface {
 	Create(ctx context.Context, url *model.URL) error
 	CreateOrGet(ctx context.Context, url *model.URL) (shortCode string, isNew bool, err error)
 	FindByID(ctx context.Context, id string) (*model.URL, error)
 	FindByURL(ctx context.Context, url string) (string, error)
 	IDExists(ctx context.Context, id string) (bool, error)
+	GetUserURLs(ctx context.Context, userId uuid.UUID) ([]model.URL, error)
 }
 
-// PostgresURLRepository implements URLRepository using PostgreSQL
 type PostgresURLRepository struct {
 	db          *pgxpool.Pool
 	redisClient *redis.Client
 	logger      *zap.Logger
 }
 
-// NewPostgresURLRepository creates a new PostgresURLRepository
 func NewPostgresURLRepository(db *pgxpool.Pool, redisClient *redis.Client) *PostgresURLRepository {
 	return &PostgresURLRepository{
 		db:          db,
@@ -50,7 +49,6 @@ func NewPostgresURLRepository(db *pgxpool.Pool, redisClient *redis.Client) *Post
 	}
 }
 
-// Create inserts a new URL mapping into the database
 func (r *PostgresURLRepository) Create(ctx context.Context, url *model.URL) error {
 	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
 	defer cancel()
@@ -65,12 +63,10 @@ func (r *PostgresURLRepository) Create(ctx context.Context, url *model.URL) erro
 	return nil
 }
 
-// CreateOrGet atomically checks if URL exists and returns existing short code, or creates new one
 func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, url *model.URL) (string, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
 	defer cancel()
 
-	// Start a transaction
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		r.logger.Error("Failed to start transaction", zap.Error(err))
@@ -80,7 +76,6 @@ func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, url *model.URL)
 		_ = tx.Rollback(ctx)
 	}()
 
-	// First, try to find existing URL
 	var existingID string
 	err = tx.QueryRow(ctx, "SELECT id FROM urls WHERE original_url = $1 LIMIT 1", url.OriginalURL).Scan(&existingID)
 
@@ -97,14 +92,12 @@ func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, url *model.URL)
 	}
 
 	if !errors.Is(err, pgx.ErrNoRows) {
-		// Real error occurred
 		r.logger.Error("Database query error", zap.Error(err), zap.String("url", url.OriginalURL))
 		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
 
-	// URL doesn't exist, insert new record
-	query := `INSERT INTO urls (id, original_url, created_at) VALUES ($1, $2, $3)`
-	_, err = tx.Exec(ctx, query, url.ID, url.OriginalURL, time.Now())
+	query := `INSERT INTO urls (id, original_url, created_at, user_id) VALUES ($1, $2, $3, $4)`
+	_, err = tx.Exec(ctx, query, url.ID, url.OriginalURL, time.Now(), url.UserID)
 	if err != nil {
 		r.logger.Error("Failed to insert URL", zap.Error(err), zap.String("id", url.ID))
 		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
@@ -119,17 +112,14 @@ func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, url *model.URL)
 	return url.ID, true, nil
 }
 
-// FindByID retrieves a URL by its short code, checking cache first
 func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (*model.URL, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
 	defer cancel()
 
-	// Try cache first if Redis is available
 	if r.redisClient != nil {
 		val, err := r.redisClient.Get(ctx, id).Result()
 		if err == nil {
 			r.logger.Debug("URL found in cache", zap.String("id", id))
-			// Cache only stores the URL string, so we create a minimal model
 			return &model.URL{ID: id, OriginalURL: val}, nil
 		}
 
@@ -138,7 +128,6 @@ func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (*model
 		}
 	}
 
-	// Query database
 	var urlModel model.URL
 	query := `SELECT id, original_url, created_at FROM urls WHERE id = $1`
 	err := r.db.QueryRow(ctx, query, id).Scan(&urlModel.ID, &urlModel.OriginalURL, &urlModel.CreatedAt)
@@ -151,7 +140,6 @@ func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (*model
 		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
 
-	// Cache the result if Redis is available
 	if r.redisClient != nil {
 		if err := r.redisClient.Set(ctx, id, urlModel.OriginalURL, cacheTimeout).Err(); err != nil {
 			r.logger.Warn("Failed to cache URL", zap.Error(err), zap.String("id", id))
@@ -162,7 +150,6 @@ func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (*model
 	return &urlModel, nil
 }
 
-// FindByURL retrieves the short code for a given URL
 func (r *PostgresURLRepository) FindByURL(ctx context.Context, url string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
 	defer cancel()
@@ -182,7 +169,6 @@ func (r *PostgresURLRepository) FindByURL(ctx context.Context, url string) (stri
 	return id, nil
 }
 
-// IDExists checks if a given ID already exists in the database
 func (r *PostgresURLRepository) IDExists(ctx context.Context, id string) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
 	defer cancel()
@@ -195,4 +181,34 @@ func (r *PostgresURLRepository) IDExists(ctx context.Context, id string) (bool, 
 	}
 
 	return count > 0, nil
+}
+
+func (r *PostgresURLRepository) GetUserURLs(ctx context.Context, userId uuid.UUID) ([]model.URL, error) {
+	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
+	defer cancel()
+
+	query := `SELECT id, original_url, created_at FROM urls WHERE user_id = $1`
+	rows, err := r.db.Query(ctx, query, userId)
+	if err != nil {
+		r.logger.Error("Database query error", zap.Error(err), zap.String("user_id", userId.String()))
+		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
+	}
+	defer rows.Close()
+
+	var urls []model.URL
+	for rows.Next() {
+		var url model.URL
+		if err := rows.Scan(&url.ID, &url.OriginalURL, &url.CreatedAt); err != nil {
+			r.logger.Error("Failed to scan URL row", zap.Error(err))
+			return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
+		}
+		urls = append(urls, url)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Row iteration error", zap.Error(err))
+		return nil, fmt.Errorf("%w: %v", ErrDatabaseError, err)
+	}
+
+	return urls, nil
 }

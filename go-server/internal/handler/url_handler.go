@@ -5,15 +5,18 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/middleware"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/service"
+	"github.com/google/uuid"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 type CreateURLRequest struct {
-	URL string `json:"url" binding:"required"`
+	URL    string     `json:"url" binding:"required"`
+	UserID *uuid.UUID `json:"user_id,omitempty"`
 }
 
 type URLResponse struct {
@@ -28,13 +31,11 @@ type ErrorResponse struct {
 	Details string `json:"details,omitempty"`
 }
 
-// URLHandler handles HTTP requests for URL operations
 type URLHandler struct {
 	service *service.URLService
 	logger  *zap.Logger
 }
 
-// NewURLHandler creates a new URLHandler
 func NewURLHandler(service *service.URLService) *URLHandler {
 	return &URLHandler{
 		service: service,
@@ -42,8 +43,9 @@ func NewURLHandler(service *service.URLService) *URLHandler {
 	}
 }
 
-// CreateTinyURL handles POST /api/shorten requests
 func (h *URLHandler) CreateTinyURL(c *gin.Context) {
+	userID := middleware.GetUserIDFromContext(c)
+
 	var req CreateURLRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Warn("Invalid request body", zap.Error(err))
@@ -54,7 +56,7 @@ func (h *URLHandler) CreateTinyURL(c *gin.Context) {
 		return
 	}
 
-	shortCode, isNew, err := h.service.ShortenURL(c.Request.Context(), req.URL)
+	shortCode, isNew, err := h.service.ShortenURL(c.Request.Context(), req.URL, userID)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -73,7 +75,6 @@ func (h *URLHandler) CreateTinyURL(c *gin.Context) {
 	}
 }
 
-// GetURL handles GET /api/shorten/:id requests
 func (h *URLHandler) GetURL(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	if id == "" {
@@ -96,7 +97,28 @@ func (h *URLHandler) GetURL(c *gin.Context) {
 	})
 }
 
-// handleError maps service errors to HTTP responses
+func (h *URLHandler) GetUserURLs(c *gin.Context) {
+	userID := middleware.GetUserIDFromContext(c)
+	if userID == nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error: "User ID not found in context",
+			Code:  "MISSING_USER_ID",
+		})
+		return
+	}
+
+	urls, err := h.service.GetUserURLs(c.Request.Context(), *userID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "User URLs retrieved successfully",
+		"urls":    urls,
+	})
+}
+
 func (h *URLHandler) handleError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrInvalidURL):

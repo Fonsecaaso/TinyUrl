@@ -1,0 +1,109 @@
+<div class="dashboard-container">
+  <div class="dashboard-header">
+    <div class="header-content">
+      <h1>My Links</h1>
+      <button class="btn-logout" (click)="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="create-url-section">
+    <h2>Create New Link</h2>
+    <div class="create-url-form">
+      <input
+        type="text"
+        [(ngModel)]="newUrl"
+        placeholder="Paste the URL you want to shorten"
+        [disabled]="isCreating"
+        (keyup.enter)="createShortUrl()"
+      >
+      <button
+        class="btn-create"
+        (click)="createShortUrl()"
+        [disabled]="isCreating || !newUrl"
+      >
+        <span *ngIf="!isCreating">Shorten</span>
+        <span *ngIf="isCreating">Creating...</span>
+      </button>
+    </div>
+
+    <div class="error-message" *ngIf="errorMessage">
+      {{ errorMessage }}
+    </div>
+
+    <!-- Result card after creating new URL -->
+    <div *ngIf="showNewUrlResult" class="result-card">
+      <h3>✓ URL Successfully Shortened!</h3>
+      <div class="url-result">
+        <div class="shortened-url">
+          <input
+            #shortUrlInput
+            [value]="getNewShortUrl()"
+            readonly
+            class="result-input"
+          >
+          <button
+            (click)="copyNewUrlToClipboard(shortUrlInput.value)"
+            class="copy-btn-result"
+            [class.copied]="isCopied"
+          >
+            {{ isCopied ? 'Copied!' : 'Copy' }}
+          </button>
+        </div>
+
+        <div class="original-url">
+          <span>Original URL:</span>
+          <a [href]="newlyCreatedOriginal" target="_blank" rel="noopener">{{ getTruncatedUrl(newlyCreatedOriginal) }}</a>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-value">{{newlyCreatedOriginal.length - getNewShortUrl().length}}</span>
+          <span class="stat-label">characters saved</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="urls-section">
+    <h2>Your Links ({{ urls.length }})</h2>
+
+    <div class="loading" *ngIf="isLoading">
+      Loading your links...
+    </div>
+
+    <div class="empty-state" *ngIf="!isLoading && urls.length === 0">
+      <p>You haven't created any links yet.</p>
+      <p>Use the form above to create your first shortened link!</p>
+    </div>
+
+    <div class="urls-list" *ngIf="!isLoading && urls.length > 0">
+      <div class="url-card" *ngFor="let url of urls">
+        <div class="url-info">
+          <div class="url-short">
+            <label>Short Link:</label>
+            <a [href]="getShortUrl(url.id)" target="_blank" class="short-link">
+              {{ getShortUrl(url.id) }}
+            </a>
+          </div>
+          <div class="url-original">
+            <label>Original URL:</label>
+            <span class="original-link">{{ url.url }}</span>
+          </div>
+          <div class="url-meta">
+            <span class="created-date">Created: {{ formatDate(url.created_at) }}</span>
+          </div>
+        </div>
+        <div class="url-actions">
+          <button
+            class="btn-copy"
+            [id]="'copy-btn-' + url.id"
+            (click)="copyToClipboard(url.id)"
+          >
+            Copy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

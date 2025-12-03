@@ -1,14 +1,27 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../environments/environment';
 
-interface ApiResponse {
-  "short_code": string; // Ajuste conforme a resposta da API
+export interface ApiResponse {
+  "short_code": string;
 }
 
-interface ResolveResponse {
-  value: string; // A API retorna um JSON com um campo "value"
+export interface ResolveResponse {
+  value: string;
+}
+
+export interface UserURL {
+  id: string;
+  url: string;
+  created_at: string;
+  user_id?: string;
+}
+
+export interface UserURLsResponse {
+  message: string;
+  urls: UserURL[];
 }
 
 @Injectable({
@@ -20,6 +33,12 @@ export class UrlShortenerService {
   constructor(private http: HttpClient) {}
 
   shortenUrl(url: string): Observable<ApiResponse> {
-    return this.http.post<ApiResponse>(this.apiUrl, { url }); // Envia a URL no body
+    return this.http.post<ApiResponse>(`${this.apiUrl}/`, { url });
+  }
+
+  getUserUrls(): Observable<UserURL[]> {
+    return this.http.get<UserURLsResponse>(`${this.apiUrl}/user/urls`).pipe(
+      map(response => response.urls)
+    );
   }
 }

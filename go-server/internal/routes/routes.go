@@ -18,10 +18,12 @@ import (
 func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine {
 	r := gin.New()
 
-	// Initialize layers
 	urlRepo := repository.NewPostgresURLRepository(pgClient, redisClient)
+	userRepo := repository.NewUserRepository(pgClient)
 	urlService := service.NewURLService(urlRepo)
+	authService := service.NewAuthService(userRepo)
 	urlHandler := handler.NewURLHandler(urlService)
+	authHandler := handler.NewAuthHandler(authService)
 
 	// Permite /api e /api/ funcionarem igual
 	r.RedirectTrailingSlash = true
@@ -31,35 +33,37 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 
 	r.Use(gin.LoggerWithWriter(gin.DefaultWriter, "/health"))
 	r.Use(gin.Recovery())
-	r.Use(requestIDMiddleware())
-	r.Use(loggingMiddleware())
-	r.Use(rateLimiter.Middleware())
 
-	// CORS
+	// CORS must be first to ensure all responses have proper headers
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
-		AllowHeaders:     []string{"Content-Type", "Authorization", requestIDHeader},
+		AllowHeaders:     []string{"Content-Type", "Authorization", requestIDHeader, "Origin", "Accept"},
 		ExposeHeaders:    []string{"Content-Length", requestIDHeader, "Cache-Hit"},
-		AllowCredentials: false,
+		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// OPTIONS
-	r.OPTIONS("/*any", func(c *gin.Context) {
-		c.Status(204)
-	})
+	r.Use(requestIDMiddleware())
+	r.Use(loggingMiddleware())
+	r.Use(rateLimiter.Middleware())
 
 	// API
 	api := r.Group("/api")
 
 	api.GET("/health", healthCheck(redisClient, pgClient))
-
-	// POST /api e POST /api/
 	api.POST("/", urlHandler.CreateTinyURL)
-
-	// GET /api/:id
+	api.POST("", urlHandler.CreateTinyURL)
 	api.GET("/:id", urlHandler.GetURL)
+	api.POST("/signup", authHandler.Register)
+	api.POST("/login", authHandler.Login)
+
+	// Rotas protegidas (requerem autenticação)
+	protected := api.Group("/user")
+	protected.Use(middleware.AuthMiddleware())
+	{
+		protected.GET("/urls", urlHandler.GetUserURLs)
+	}
 
 	return r
 }

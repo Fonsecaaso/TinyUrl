@@ -7,6 +7,7 @@ import (
 
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/model"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
@@ -45,6 +46,14 @@ func (m *MockURLRepository) IDExists(ctx context.Context, id string) (bool, erro
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockURLRepository) GetUserURLs(ctx context.Context, userId uuid.UUID) ([]model.URL, error) {
+	args := m.Called(ctx, userId)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]model.URL), args.Error(1)
+}
+
 func setupService(t *testing.T) (*URLService, *MockURLRepository) {
 	// Initialize logger for tests
 	logger, _ := zap.NewDevelopment()
@@ -79,7 +88,7 @@ func TestShortenURL_Success_NewURL(t *testing.T) {
 	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return(expectedShortCode, true, nil)
 
-	shortCode, isNew, err := service.ShortenURL(ctx, testURL)
+	shortCode, isNew, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedShortCode, shortCode)
@@ -101,7 +110,7 @@ func TestShortenURL_Success_ExistingURL(t *testing.T) {
 	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return(existingShortCode, false, nil)
 
-	shortCode, isNew, err := service.ShortenURL(ctx, testURL)
+	shortCode, isNew, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, existingShortCode, shortCode)
@@ -124,7 +133,7 @@ func TestShortenURL_InvalidURL(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := service.ShortenURL(ctx, tc.url)
+			_, _, err := service.ShortenURL(ctx, tc.url, nil)
 			assert.ErrorIs(t, err, ErrInvalidURL)
 		})
 	}
@@ -141,7 +150,7 @@ func TestShortenURL_URLNormalization(t *testing.T) {
 	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return(expectedShortCode, true, nil)
 
-	shortCode, isNew, err := service.ShortenURL(ctx, testURL)
+	shortCode, isNew, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedShortCode, shortCode)
@@ -159,7 +168,7 @@ func TestShortenURL_IDGenerationFailure(t *testing.T) {
 	mockRepo.On("IDExists", ctx, mock.AnythingOfType("string")).
 		Return(true, nil).Times(maxIDGenerationAttempts)
 
-	_, _, err := service.ShortenURL(ctx, testURL)
+	_, _, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.ErrorIs(t, err, ErrIDGenerationMax)
 	mockRepo.AssertExpectations(t)
@@ -176,7 +185,7 @@ func TestShortenURL_RepositoryError(t *testing.T) {
 	mockRepo.On("CreateOrGet", ctx, mock.AnythingOfType("*model.URL")).
 		Return("", false, dbError)
 
-	_, _, err := service.ShortenURL(ctx, testURL)
+	_, _, err := service.ShortenURL(ctx, testURL, nil)
 
 	assert.Error(t, err)
 	assert.Equal(t, dbError, err)
@@ -326,8 +335,8 @@ func TestCreateID(t *testing.T) {
 		for _, char := range id {
 			assert.True(t,
 				(char >= 'a' && char <= 'z') ||
-				(char >= 'A' && char <= 'Z') ||
-				(char >= '0' && char <= '9'),
+					(char >= 'A' && char <= 'Z') ||
+					(char >= '0' && char <= '9'),
 				"ID contains invalid character: %c", char,
 			)
 		}

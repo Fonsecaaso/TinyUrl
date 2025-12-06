@@ -14,16 +14,16 @@ import (
 )
 
 var (
-	Logger    *zap.Logger
-	lokiURL   string
-	lokiHTTP  *http.Client
-	logBuffer []lokiLog
+	Logger   *zap.Logger
+	lokiURL  string
+	lokiHTTP *http.Client
+	// logBuffer []lokiLog
 )
 
-type lokiLog struct {
-	Timestamp string
-	Line      string
-}
+// type lokiLog struct {
+// 	Timestamp string
+// 	Line      string
+// }
 
 type lokiStream struct {
 	Stream map[string]string `json:"stream"`
@@ -159,7 +159,9 @@ func (w *lokiWriter) Write(p []byte) (n int, err error) {
 			fmt.Fprintf(os.Stderr, "failed to send log to loki: %v\n", err)
 			return
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 
 		if resp.StatusCode >= 400 {
 			fmt.Fprintf(os.Stderr, "loki returned error: %d\n", resp.StatusCode)

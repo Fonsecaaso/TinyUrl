@@ -60,6 +60,7 @@ go run main.go
 - **[GRAFANA_SETUP.md](observability/GRAFANA_SETUP.md)** - Complete Grafana guide
 - **[METRICS.md](go-server/METRICS.md)** - Detailed documentation of all metrics
 - **[QUICKSTART_METRICS.md](go-server/QUICKSTART_METRICS.md)** - Quick metrics guide
+- **[LOGGING_SETUP.md](observability/LOGGING_SETUP.md)** - Logging with OpenTelemetry guide
 
 ## 🧪 Test
 

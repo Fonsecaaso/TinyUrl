@@ -32,19 +32,8 @@ services:
     volumes:
       - ./loki/loki.yaml:/etc/loki/loki.yaml
       - ./loki-data:/loki
-
     ports:
-      - "3100:3100"
-
-  promtail:
-    image: grafana/promtail:2.9.4
-    container_name: promtail
-    volumes:
-      - ./promtail/promtail.yaml:/etc/promtail/promtail.yaml
-      - /var/log:/var/log
-    command: -config.file=/etc/promtail/promtail.yaml
-    depends_on:
-      - loki
+      - "0.0.0.0:3100:3100"
 
   tempo:
     image: grafana/tempo:2.5.0
@@ -57,16 +46,17 @@ services:
       - "3200:3200"
 
   otel-collector:
-    image: otel/opentelemetry-collector:latest
+    image: otel/opentelemetry-collector-contrib:latest
     container_name: otel-collector
     command: ["--config=/etc/otel.yaml"]
     volumes:
       - ./otel-collector/otel.yaml:/etc/otel.yaml
     ports:
-      - "4317:4317"
-      - "4318:4318"
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
     depends_on:
       - tempo
+      - loki
 
 volumes:
   grafana-data:

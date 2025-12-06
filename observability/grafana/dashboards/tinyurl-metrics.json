@@ -1,0 +1,199 @@
+{
+  "dashboard": {
+    "title": "TinyURL Metrics Dashboard",
+    "tags": ["tinyurl", "golang", "api"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate (req/s)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total[1m]))",
+            "legendFormat": "Total Requests/s"
+          },
+          {
+            "expr": "sum by (path) (rate(http_requests_total[1m]))",
+            "legendFormat": "{{path}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Request Latency (P50, P95, P99)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P99"
+          }
+        ],
+        "yaxis": {
+          "format": "s"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Throughput (MB/s)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(http_response_size_bytes_sum[1m])) / 1024 / 1024",
+            "legendFormat": "Response Throughput"
+          },
+          {
+            "expr": "sum(rate(http_request_size_bytes_sum[1m])) / 1024 / 1024",
+            "legendFormat": "Request Throughput"
+          }
+        ],
+        "yaxis": {
+          "format": "MBs"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Error Rate (%)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{status=~\"4..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
+            "legendFormat": "4xx Errors"
+          },
+          {
+            "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100",
+            "legendFormat": "5xx Errors"
+          }
+        ],
+        "yaxis": {
+          "format": "percent"
+        }
+      },
+      {
+        "id": 5,
+        "title": "Memory Usage (MB)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "memory_usage_bytes{type=\"heap_alloc\"} / 1024 / 1024",
+            "legendFormat": "Heap Allocated"
+          },
+          {
+            "expr": "memory_usage_bytes{type=\"heap_in_use\"} / 1024 / 1024",
+            "legendFormat": "Heap In Use"
+          },
+          {
+            "expr": "memory_usage_bytes{type=\"sys\"} / 1024 / 1024",
+            "legendFormat": "Total System"
+          }
+        ],
+        "yaxis": {
+          "format": "MBs"
+        }
+      },
+      {
+        "id": 6,
+        "title": "Goroutines",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "go_goroutines_count",
+            "legendFormat": "Goroutines"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Requests In Flight",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "http_requests_in_flight"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Cache Hit Rate (%)",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(rate(cache_hits_total[5m])) / (sum(rate(cache_hits_total[5m])) + sum(rate(cache_misses_total[5m]))) * 100"
+          }
+        ],
+        "format": "percent"
+      },
+      {
+        "id": 9,
+        "title": "Total URLs Created",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(url_creation_total)"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Total URL Accesses",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(url_access_total)"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "DB Connections",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+        "targets": [
+          {
+            "expr": "db_connections_in_use",
+            "legendFormat": "In Use"
+          },
+          {
+            "expr": "db_connections_idle",
+            "legendFormat": "Idle"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Status Code Distribution",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+        "targets": [
+          {
+            "expr": "sum by (status) (rate(http_requests_total[5m]))",
+            "legendFormat": "{{status}}"
+          }
+        ]
+      }
+    ],
+    "refresh": "5s",
+    "time": {
+      "from": "now-15m",
+      "to": "now"
+    }
+  }
+}

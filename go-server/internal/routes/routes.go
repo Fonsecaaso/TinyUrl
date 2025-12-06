@@ -7,9 +7,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/handler"
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/metrics"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/middleware"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/repository"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/service"
@@ -17,6 +19,9 @@ import (
 
 func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine {
 	r := gin.New()
+
+	// Start system metrics collection
+	metrics.StartSystemMetricsCollection()
 
 	urlRepo := repository.NewPostgresURLRepository(pgClient, redisClient)
 	userRepo := repository.NewUserRepository(pgClient)
@@ -45,8 +50,10 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	}))
 
 	r.Use(requestIDMiddleware())
+	r.Use(middleware.MetricsMiddleware())
 	r.Use(loggingMiddleware())
 	r.Use(rateLimiter.Middleware())
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// API
 	api := r.Group("/api")

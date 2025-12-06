@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/metrics"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/model"
 	"github.com/google/uuid"
 
@@ -67,49 +68,48 @@ func (r *PostgresURLRepository) CreateOrGet(ctx context.Context, url *model.URL)
 	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
 	defer cancel()
 
-	tx, err := r.db.Begin(ctx)
+	// Use UPSERT with INSERT ... ON CONFLICT DO NOTHING
+	// This reduces from 4 roundtrips (BEGIN + SELECT + INSERT + COMMIT) to 1 single query
+	query := `
+		INSERT INTO urls (id, original_url, created_at, user_id)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (original_url) DO NOTHING
+		RETURNING id, (xmax = 0) AS inserted
+	`
+
+	var returnedID string
+	var inserted bool
+	err := r.db.QueryRow(ctx, query, url.ID, url.OriginalURL, time.Now(), url.UserID).Scan(&returnedID, &inserted)
+
 	if err != nil {
-		r.logger.Error("Failed to start transaction", zap.Error(err))
-		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
-	}
-	defer func() {
-		_ = tx.Rollback(ctx)
-	}()
-
-	var existingID string
-	err = tx.QueryRow(ctx, "SELECT id FROM urls WHERE original_url = $1 LIMIT 1", url.OriginalURL).Scan(&existingID)
-
-	if err == nil {
-		// URL already exists, return existing short code
-		if err := tx.Commit(ctx); err != nil {
-			r.logger.Error("Failed to commit transaction", zap.Error(err))
-			return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
+		// If the UPSERT failed to return (conflict but no RETURNING), we need to fetch the existing ID
+		if errors.Is(err, pgx.ErrNoRows) {
+			// This means the INSERT was skipped due to conflict, need to get existing ID
+			var existingID string
+			selectErr := r.db.QueryRow(ctx, "SELECT id FROM urls WHERE original_url = $1", url.OriginalURL).Scan(&existingID)
+			if selectErr != nil {
+				r.logger.Error("Failed to fetch existing URL after conflict", zap.Error(selectErr), zap.String("url", url.OriginalURL))
+				return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, selectErr)
+			}
+			r.logger.Info("URL already exists, returning existing short code",
+				zap.String("id", existingID),
+				zap.String("url", url.OriginalURL))
+			return existingID, false, nil
 		}
-		r.logger.Info("URL already exists, returning existing short code",
-			zap.String("id", existingID),
-			zap.String("url", url.OriginalURL))
-		return existingID, false, nil
-	}
 
-	if !errors.Is(err, pgx.ErrNoRows) {
-		r.logger.Error("Database query error", zap.Error(err), zap.String("url", url.OriginalURL))
-		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
-	}
-
-	query := `INSERT INTO urls (id, original_url, created_at, user_id) VALUES ($1, $2, $3, $4)`
-	_, err = tx.Exec(ctx, query, url.ID, url.OriginalURL, time.Now(), url.UserID)
-	if err != nil {
 		r.logger.Error("Failed to insert URL", zap.Error(err), zap.String("id", url.ID))
 		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		r.logger.Error("Failed to commit transaction", zap.Error(err))
-		return "", false, fmt.Errorf("%w: %v", ErrDatabaseError, err)
+	if inserted {
+		r.logger.Info("New URL created", zap.String("id", returnedID), zap.String("url", url.OriginalURL))
+		return returnedID, true, nil
 	}
 
-	r.logger.Info("New URL created", zap.String("id", url.ID), zap.String("url", url.OriginalURL))
-	return url.ID, true, nil
+	r.logger.Info("URL already exists, returning existing short code",
+		zap.String("id", returnedID),
+		zap.String("url", url.OriginalURL))
+	return returnedID, false, nil
 }
 
 func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (*model.URL, error) {
@@ -120,10 +120,13 @@ func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (*model
 		val, err := r.redisClient.Get(ctx, id).Result()
 		if err == nil {
 			r.logger.Debug("URL found in cache", zap.String("id", id))
+			metrics.CacheHitsTotal.WithLabelValues("redis").Inc()
 			return &model.URL{ID: id, OriginalURL: val}, nil
 		}
 
-		if err != redis.Nil {
+		if err == redis.Nil {
+			metrics.CacheMissesTotal.WithLabelValues("redis").Inc()
+		} else {
 			r.logger.Warn("Cache error", zap.Error(err), zap.String("id", id))
 		}
 	}

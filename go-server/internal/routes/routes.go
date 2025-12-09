@@ -8,6 +8,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.uber.org/zap"
 
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/handler"
@@ -38,6 +39,7 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 
 	r.Use(gin.LoggerWithWriter(gin.DefaultWriter, "/health"))
 	r.Use(gin.Recovery())
+	r.Use(otelgin.Middleware("go-backend"))
 
 	// CORS must be first to ensure all responses have proper headers
 	r.Use(cors.New(cors.Config{

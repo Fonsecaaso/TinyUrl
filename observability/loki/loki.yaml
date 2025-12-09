@@ -4,23 +4,22 @@ server:
   http_listen_port: 3100
   grpc_listen_port: 9095
 
-distributor:
-  ring:
-    kvstore:
-      store: inmemory
+common:
+  replication_factor: 1       # <====== ESSENCIAL PARA SINGLE-NODE
+  path_prefix: /loki
 
 ingester:
   wal:
     enabled: true
     dir: /loki/wal
   lifecycler:
+    join_after: 0s
     ring:
       kvstore:
         store: inmemory
-      replication_factor: 1
+      replication_factor: 1   # <====== ESSENCIAL PARA SINGLE-NODE
   chunk_idle_period: 1h
   max_chunk_age: 1h
-  chunk_retain_period: 30s
 
 schema_config:
   configs:
@@ -44,10 +43,3 @@ storage_config:
 compactor:
   working_directory: /loki/compactor
   shared_store: filesystem
-
-limits_config:
-  enforce_metric_name: false
-  reject_old_samples: true
-  reject_old_samples_max_age: 168h
-  ingestion_rate_mb: 16
-  ingestion_burst_size_mb: 32

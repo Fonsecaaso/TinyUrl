@@ -11,21 +11,17 @@ import (
 	db "github.com/fonsecaaso/TinyUrl/go-server/internal/database"
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/logger"
 	route "github.com/fonsecaaso/TinyUrl/go-server/internal/routes"
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/tracing"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
 
 func main() {
 	ctx := context.Background()
-
-	// Load .env file FIRST (before initializing logger)
-	// This ensures LOKI_URL and other env vars are available
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found, using environment variables")
 	}
 
-	// Initialize Loki logger (sends logs directly to Loki)
-	// Now it can read LOKI_URL from the environment
 	if err := logger.InitLokiLogger("tinyurl-api", "development"); err != nil {
 		panic("failed to initialize logger: " + err.Error())
 	}
@@ -34,7 +30,9 @@ func main() {
 		_ = logger.Shutdown(ctx)
 	}()
 
-	// Replace global zap logger
+	shutdown := tracing.InitTracer()
+	defer shutdown(context.Background())
+
 	zap.ReplaceGlobals(logger.Logger)
 
 	secrets, err := config.LoadConfig()
@@ -66,7 +64,6 @@ func main() {
 	r := route.SetupRouter(redisClient, pgClient)
 	logger.Logger.Info("starting server on :8080")
 
-	// Setup graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 

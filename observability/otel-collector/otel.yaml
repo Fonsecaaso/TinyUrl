@@ -6,14 +6,23 @@ receivers:
       grpc:
         endpoint: 0.0.0.0:4317
 
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  resource:
+    attributes:
+      - key: service.name
+        value: tinyurl-api
+        action: upsert
+
 exporters:
-  # Tempo for traces
-  otlp:
+  otlp/tempo:
     endpoint: tempo:4317
     tls:
       insecure: true
 
-  # Loki for logs via OTLP HTTP
   otlphttp/loki:
     endpoint: http://loki:3100/otlp
     tls:
@@ -22,24 +31,12 @@ exporters:
   debug:
     verbosity: detailed
 
-processors:
-  batch:
-    timeout: 10s
-    send_batch_size: 1024
-
-  # Add resource attributes
-  resource:
-    attributes:
-      - key: service.name
-        value: tinyurl-api
-        action: upsert
-
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [resource, batch]
-      exporters: [otlp, debug]
+      exporters: [otlp/tempo, debug]
 
     logs:
       receivers: [otlp]

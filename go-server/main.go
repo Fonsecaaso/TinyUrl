@@ -31,7 +31,9 @@ func main() {
 	}()
 
 	shutdown := tracing.InitTracer()
-	defer shutdown(context.Background())
+	defer func() {
+		_ = shutdown(context.Background())
+	}()
 
 	zap.ReplaceGlobals(logger.Logger)
 

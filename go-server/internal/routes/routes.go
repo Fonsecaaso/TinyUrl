@@ -24,7 +24,10 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	r := gin.New()
 
 	// Start system metrics collection
-	metrics.StartSystemMetricsCollection()
+	if err := metrics.StartSystemMetricsCollection(); err != nil {
+		// Log error but don't fail - metrics are optional
+		zap.L().Warn("Failed to start system metrics collection", zap.Error(err))
+	}
 
 	urlRepo := repository.NewPostgresURLRepository(pgClient, redisClient)
 	userRepo := repository.NewUserRepository(pgClient)

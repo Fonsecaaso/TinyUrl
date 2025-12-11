@@ -30,14 +30,9 @@ var (
 	cacheMissesTotal metric.Int64Counter
 
 	// Database Metrics
-	dbConnectionsInUse metric.Int64ObservableGauge
-	dbConnectionsIdle  metric.Int64ObservableGauge
-	dbQueryDuration    metric.Float64Histogram
+	dbQueryDuration metric.Float64Histogram
 
-	// System Metrics
-	goRoutines   metric.Int64ObservableGauge
-	memoryUsage  metric.Int64ObservableGauge
-	cpuUsage     metric.Float64ObservableGauge
+	// metricsReady tracks if metrics are initialized
 	metricsReady bool
 )
 

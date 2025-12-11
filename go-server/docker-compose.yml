@@ -1,0 +1,16 @@
+services:
+  go-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-server
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    networks:
+      - observability
+
+networks:
+  observability:
+    external: true

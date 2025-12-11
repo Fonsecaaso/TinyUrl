@@ -79,3 +79,18 @@ docker tag tiny-url-frontend:latest 173941740239.dkr.ecr.us-east-1.amazonaws.com
 docker push 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url-frontend:latest
 ```
 
+## 📊 Observability
+
+Complete metrics, logs, and tracing system with Grafana, Prometheus, Loki, and Tempo.
+
+See full documentation: [OBSERVABILITY.md](OBSERVABILITY.md)
+
+Quick start:
+```bash
+# Start observability stack
+cd observability && docker-compose up -d
+
+# Access Grafana
+open http://localhost:3000  # admin/admin
+```
+

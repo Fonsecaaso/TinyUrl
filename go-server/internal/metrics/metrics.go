@@ -1,0 +1,283 @@
+package metrics
+
+import (
+	"context"
+	"runtime"
+	"sync"
+	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+)
+
+var (
+	once      sync.Once
+	meter     metric.Meter
+	initError error
+
+	// HTTP Metrics
+	httpRequestsTotal    metric.Int64Counter
+	httpRequestDuration  metric.Float64Histogram
+	httpRequestSize      metric.Int64Histogram
+	httpResponseSize     metric.Int64Histogram
+	httpRequestsInFlight metric.Int64UpDownCounter
+
+	// Application Metrics
+	urlCreationTotal metric.Int64Counter
+	urlAccessTotal   metric.Int64Counter
+	cacheHitsTotal   metric.Int64Counter
+	cacheMissesTotal metric.Int64Counter
+
+	// Database Metrics
+	dbQueryDuration metric.Float64Histogram
+
+	// metricsReady tracks if metrics are initialized
+	metricsReady bool
+)
+
+// InitMetrics initializes all OTEL metrics instruments
+func InitMetrics() error {
+	var err error
+	once.Do(func() {
+		meter = otel.Meter("github.com/fonsecaaso/TinyUrl/go-server")
+
+		// HTTP Metrics
+		httpRequestsTotal, err = meter.Int64Counter(
+			"http.requests.total",
+			metric.WithDescription("Total number of HTTP requests"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		httpRequestDuration, err = meter.Float64Histogram(
+			"http.request.duration",
+			metric.WithDescription("HTTP request duration in seconds"),
+			metric.WithUnit("s"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		httpRequestSize, err = meter.Int64Histogram(
+			"http.request.size",
+			metric.WithDescription("HTTP request size in bytes"),
+			metric.WithUnit("By"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		httpResponseSize, err = meter.Int64Histogram(
+			"http.response.size",
+			metric.WithDescription("HTTP response size in bytes"),
+			metric.WithUnit("By"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		httpRequestsInFlight, err = meter.Int64UpDownCounter(
+			"http.requests.in_flight",
+			metric.WithDescription("Current number of HTTP requests being processed"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		// Application Metrics
+		urlCreationTotal, err = meter.Int64Counter(
+			"url.creation.total",
+			metric.WithDescription("Total number of URLs created"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		urlAccessTotal, err = meter.Int64Counter(
+			"url.access.total",
+			metric.WithDescription("Total number of URL accesses/redirects"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		cacheHitsTotal, err = meter.Int64Counter(
+			"cache.hits.total",
+			metric.WithDescription("Total number of cache hits"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		cacheMissesTotal, err = meter.Int64Counter(
+			"cache.misses.total",
+			metric.WithDescription("Total number of cache misses"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		// Database Metrics
+		dbQueryDuration, err = meter.Float64Histogram(
+			"db.query.duration",
+			metric.WithDescription("Database query duration in seconds"),
+			metric.WithUnit("s"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		metricsReady = true
+	})
+
+	return initError
+}
+
+// StartSystemMetricsCollection starts collecting system metrics periodically
+func StartSystemMetricsCollection() error {
+	if !metricsReady {
+		if err := InitMetrics(); err != nil {
+			return err
+		}
+	}
+
+	// Register observable gauges for system metrics
+	_, err := meter.Int64ObservableGauge(
+		"go.goroutines",
+		metric.WithDescription("Number of goroutines"),
+		metric.WithInt64Callback(func(ctx context.Context, observer metric.Int64Observer) error {
+			observer.Observe(int64(runtime.NumGoroutine()))
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+
+	// Memory metrics
+	_, err = meter.Int64ObservableGauge(
+		"go.memory.alloc",
+		metric.WithDescription("Bytes of allocated heap objects"),
+		metric.WithUnit("By"),
+		metric.WithInt64Callback(func(ctx context.Context, observer metric.Int64Observer) error {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			observer.Observe(int64(m.Alloc))
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = meter.Int64ObservableGauge(
+		"go.memory.heap",
+		metric.WithDescription("Heap memory usage"),
+		metric.WithUnit("By"),
+		metric.WithInt64Callback(func(ctx context.Context, observer metric.Int64Observer) error {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			observer.Observe(int64(m.HeapAlloc))
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RecordHTTPMetrics records metrics for an HTTP request
+func RecordHTTPMetrics(ctx context.Context, method, path, status string, duration time.Duration, requestSize, responseSize int64) {
+	if !metricsReady {
+		return
+	}
+
+	attrs := metric.WithAttributes(
+		attribute.String("method", method),
+		attribute.String("path", path),
+		attribute.String("status", status),
+	)
+
+	httpRequestsTotal.Add(ctx, 1, attrs)
+	httpRequestDuration.Record(ctx, duration.Seconds(), attrs)
+	httpRequestSize.Record(ctx, requestSize, metric.WithAttributes(
+		attribute.String("method", method),
+		attribute.String("path", path),
+	))
+	httpResponseSize.Record(ctx, responseSize, attrs)
+}
+
+// RecordURLCreation records URL creation metrics
+func RecordURLCreation(ctx context.Context, status string) {
+	if !metricsReady {
+		return
+	}
+	urlCreationTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("status", status)))
+}
+
+// RecordURLAccess records URL access metrics
+func RecordURLAccess(ctx context.Context, status string) {
+	if !metricsReady {
+		return
+	}
+	urlAccessTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("status", status)))
+}
+
+// RecordCacheHit records cache hit metrics
+func RecordCacheHit(ctx context.Context, cacheType string) {
+	if !metricsReady {
+		return
+	}
+	cacheHitsTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("cache_type", cacheType)))
+}
+
+// RecordCacheMiss records cache miss metrics
+func RecordCacheMiss(ctx context.Context, cacheType string) {
+	if !metricsReady {
+		return
+	}
+	cacheMissesTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("cache_type", cacheType)))
+}
+
+// RecordDBQueryDuration records database query duration
+func RecordDBQueryDuration(ctx context.Context, queryType string, duration time.Duration) {
+	if !metricsReady {
+		return
+	}
+	dbQueryDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attribute.String("query_type", queryType)))
+}
+
+// IncrementRequestsInFlight increments the in-flight requests counter
+func IncrementRequestsInFlight(ctx context.Context) {
+	if !metricsReady {
+		return
+	}
+	httpRequestsInFlight.Add(ctx, 1)
+}
+
+// DecrementRequestsInFlight decrements the in-flight requests counter
+func DecrementRequestsInFlight(ctx context.Context) {
+	if !metricsReady {
+		return
+	}
+	httpRequestsInFlight.Add(ctx, -1)
+}
+
+// IsInitialized returns whether metrics are initialized and ready
+func IsInitialized() bool {
+	return metricsReady
+}

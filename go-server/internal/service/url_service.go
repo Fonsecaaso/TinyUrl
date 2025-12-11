@@ -65,13 +65,13 @@ func (s *URLService) ShortenURL(ctx context.Context, rawURL string, userId *uuid
 	resultCode, isNew, err := s.repo.CreateOrGet(ctx, urlModel)
 	if err != nil {
 		s.logger.Error("Failed to store URL", zap.Error(err), zap.String("id", shortCode))
-		metrics.URLCreationTotal.WithLabelValues("error").Inc()
+		metrics.RecordURLCreation(ctx, "error")
 		return "", false, err
 	}
 
 	if isNew {
 		s.logger.Info("URL shortened successfully", zap.String("id", resultCode), zap.String("url", normalizedURL))
-		metrics.URLCreationTotal.WithLabelValues("success").Inc()
+		metrics.RecordURLCreation(ctx, "success")
 	} else {
 		s.logger.Info("URL already exists, returning existing short code", zap.String("id", resultCode), zap.String("url", normalizedURL))
 	}
@@ -82,7 +82,7 @@ func (s *URLService) ShortenURL(ctx context.Context, rawURL string, userId *uuid
 func (s *URLService) GetOriginalURL(ctx context.Context, shortCode string) (string, error) {
 	if !s.isValidID(shortCode) {
 		s.logger.Warn("Invalid short code format", zap.String("shortCode", shortCode))
-		metrics.URLAccessTotal.WithLabelValues("error").Inc()
+		metrics.RecordURLAccess(ctx, "error")
 		return "", errors.New("invalid short code format")
 	}
 
@@ -90,16 +90,16 @@ func (s *URLService) GetOriginalURL(ctx context.Context, shortCode string) (stri
 	if err != nil {
 		if errors.Is(err, repository.ErrURLNotFound) {
 			s.logger.Info("URL not found", zap.String("shortCode", shortCode))
-			metrics.URLAccessTotal.WithLabelValues("not_found").Inc()
+			metrics.RecordURLAccess(ctx, "not_found")
 			return "", repository.ErrURLNotFound
 		}
 		s.logger.Error("Failed to retrieve URL", zap.Error(err), zap.String("shortCode", shortCode))
-		metrics.URLAccessTotal.WithLabelValues("error").Inc()
+		metrics.RecordURLAccess(ctx, "error")
 		return "", err
 	}
 
 	s.logger.Info("URL retrieved successfully", zap.String("shortCode", shortCode))
-	metrics.URLAccessTotal.WithLabelValues("success").Inc()
+	metrics.RecordURLAccess(ctx, "success")
 	return urlModel.OriginalURL, nil
 }
 

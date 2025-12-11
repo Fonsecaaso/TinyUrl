@@ -120,12 +120,12 @@ func (r *PostgresURLRepository) FindByID(ctx context.Context, id string) (*model
 		val, err := r.redisClient.Get(ctx, id).Result()
 		if err == nil {
 			r.logger.Debug("URL found in cache", zap.String("id", id))
-			metrics.CacheHitsTotal.WithLabelValues("redis").Inc()
+			metrics.RecordCacheHit(ctx, "redis")
 			return &model.URL{ID: id, OriginalURL: val}, nil
 		}
 
 		if err == redis.Nil {
-			metrics.CacheMissesTotal.WithLabelValues("redis").Inc()
+			metrics.RecordCacheMiss(ctx, "redis")
 		} else {
 			r.logger.Warn("Cache error", zap.Error(err), zap.String("id", id))
 		}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -37,14 +38,23 @@ type lokiPushRequest struct {
 // InitLokiLogger initializes a logger that sends logs to Loki and console
 func InitLokiLogger(serviceName, environment string) error {
 	// Get Loki endpoint from environment or use default
-	lokiURL = os.Getenv("LOKI_URL")
+	lokiURL = os.Getenv("LOKI_ENDPOINT")
 	if lokiURL == "" {
-		lokiURL = "http://localhost:3100/loki/api/v1/push"
+		lokiURL = os.Getenv("LOKI_URL")
+		if lokiURL == "" {
+			lokiURL = "http://localhost:3100/loki/api/v1/push"
+		}
 	}
 
-	// Create HTTP client for Loki
+	// Create HTTP client for Loki with retry support
 	lokiHTTP = &http.Client{
 		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        10,
+			IdleConnTimeout:     30 * time.Second,
+			DisableCompression:  false,
+			DisableKeepAlives:   false,
+		},
 	}
 
 	// Create console encoder for development
@@ -103,7 +113,7 @@ func (w *lokiWriter) Write(p []byte) (n int, err error) {
 			"job":          "tinyurl-api",
 		}
 
-		// Parse JSON to extract important fields as labels
+		// Parse JSON to extract important fields as labels and add trace_id/span_id
 		var logEntry map[string]interface{}
 		if err := json.Unmarshal(p, &logEntry); err == nil {
 			// Extract level (info, warn, error, debug)
@@ -125,6 +135,21 @@ func (w *lokiWriter) Write(p []byte) (n int, err error) {
 			if status, ok := logEntry["status"].(float64); ok {
 				labels["status"] = fmt.Sprintf("%d", int(status))
 			}
+
+			// Extract trace_id if present
+			if traceID, ok := logEntry["trace_id"].(string); ok && traceID != "" {
+				labels["trace_id"] = traceID
+			}
+
+			// Extract span_id if present
+			if spanID, ok := logEntry["span_id"].(string); ok && spanID != "" {
+				labels["span_id"] = spanID
+			}
+
+			// Extract request_id if present
+			if requestID, ok := logEntry["request_id"].(string); ok && requestID != "" {
+				labels["request_id"] = requestID
+			}
 		}
 
 		// Create Loki push request
@@ -145,26 +170,44 @@ func (w *lokiWriter) Write(p []byte) (n int, err error) {
 			return
 		}
 
-		req, err := http.NewRequest("POST", lokiURL, bytes.NewBuffer(jsonData))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to create loki request: %v\n", err)
-			return
-		}
+		// Retry logic with exponential backoff
+		maxRetries := 3
+		baseDelay := 100 * time.Millisecond
 
-		req.Header.Set("Content-Type", "application/json")
+		for attempt := 0; attempt < maxRetries; attempt++ {
+			req, err := http.NewRequest("POST", lokiURL, bytes.NewBuffer(jsonData))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to create loki request: %v\n", err)
+				return
+			}
 
-		resp, err := lokiHTTP.Do(req)
-		if err != nil {
-			// Don't fail the write if Loki is unavailable
-			fmt.Fprintf(os.Stderr, "failed to send log to loki: %v\n", err)
-			return
-		}
-		defer func() {
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := lokiHTTP.Do(req)
+			if err != nil {
+				// Retry with exponential backoff
+				if attempt < maxRetries-1 {
+					delay := baseDelay * time.Duration(1<<uint(attempt))
+					time.Sleep(delay)
+					continue
+				}
+				fmt.Fprintf(os.Stderr, "failed to send log to loki after %d attempts: %v\n", maxRetries, err)
+				return
+			}
+
+			if resp.StatusCode >= 400 {
+				_ = resp.Body.Close()
+				if attempt < maxRetries-1 {
+					delay := baseDelay * time.Duration(1<<uint(attempt))
+					time.Sleep(delay)
+					continue
+				}
+				fmt.Fprintf(os.Stderr, "loki returned error %d after %d attempts\n", resp.StatusCode, maxRetries)
+				return
+			}
+
 			_ = resp.Body.Close()
-		}()
-
-		if resp.StatusCode >= 400 {
-			fmt.Fprintf(os.Stderr, "loki returned error: %d\n", resp.StatusCode)
+			return // Success
 		}
 	}()
 
@@ -191,4 +234,18 @@ func Shutdown(ctx context.Context) error {
 	// Wait for async writes
 	time.Sleep(500 * time.Millisecond)
 	return nil
+}
+
+// WithTrace extracts trace and span IDs from context and adds them to the logger
+func WithTrace(ctx context.Context, logger *zap.Logger) *zap.Logger {
+	span := trace.SpanFromContext(ctx)
+	if !span.SpanContext().IsValid() {
+		return logger
+	}
+
+	spanContext := span.SpanContext()
+	return logger.With(
+		zap.String("trace_id", spanContext.TraceID().String()),
+		zap.String("span_id", spanContext.SpanID().String()),
+	)
 }

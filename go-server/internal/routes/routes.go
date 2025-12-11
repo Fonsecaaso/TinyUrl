@@ -1,6 +1,7 @@
 package route
 
 import (
+	"os"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -9,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/handler"
@@ -37,17 +39,28 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 
 	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
 
+	serviceName := os.Getenv("SERVICE_NAME")
+	if serviceName == "" {
+		serviceName = "go-backend"
+	}
+
 	r.Use(gin.LoggerWithWriter(gin.DefaultWriter, "/health"))
 	r.Use(gin.Recovery())
-	r.Use(otelgin.Middleware("go-backend"))
+	r.Use(otelgin.Middleware(serviceName))
 
-	// CORS must be first to ensure all responses have proper headers
+	// CORS configuration
+	allowedOrigins := []string{"https://fonsecaaso.com"}
+	// Allow all origins in local development
+	if os.Getenv("ENV") == "local" {
+		allowedOrigins = []string{"*"}
+	}
+
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization", requestIDHeader, "Origin", "Accept"},
 		ExposeHeaders:    []string{"Content-Length", requestIDHeader, "Cache-Hit"},
-		AllowCredentials: true,
+		AllowCredentials: os.Getenv("ENV") == "local", // Only allow credentials in local dev
 		MaxAge:           12 * time.Hour,
 	}))
 
@@ -55,7 +68,14 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	r.Use(middleware.MetricsMiddleware())
 	r.Use(loggingMiddleware())
 	r.Use(rateLimiter.Middleware())
-	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// Only expose /metrics endpoint in local environment
+	if os.Getenv("ENV") == "local" {
+		r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	}
+
+	// Healthz endpoint for observability status
+	r.GET("/healthz", healthzCheck())
 
 	// API
 	api := r.Group("/api")
@@ -96,8 +116,17 @@ func loggingMiddleware() gin.HandlerFunc {
 		start := time.Now()
 		requestID := c.GetString("requestID")
 
+		// Extract trace and span IDs from OpenTelemetry context
+		span := trace.SpanFromContext(c.Request.Context())
+		spanContext := span.SpanContext()
+		traceID := spanContext.TraceID().String()
+		spanID := spanContext.SpanID().String()
+
+		// Create logger with trace context
 		logger := zap.L().With(
 			zap.String("request_id", requestID),
+			zap.String("trace_id", traceID),
+			zap.String("span_id", spanID),
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
 			zap.String("ip", c.ClientIP()),
@@ -107,10 +136,12 @@ func loggingMiddleware() gin.HandlerFunc {
 		c.Next()
 
 		latency := time.Since(start)
+		latencyMs := float64(latency.Milliseconds())
 		status := c.Writer.Status()
 
 		logger.Info("Request completed",
 			zap.Int("status", status),
+			zap.Float64("latency_ms", latencyMs),
 			zap.Duration("latency", latency),
 		)
 	}
@@ -169,6 +200,55 @@ func healthCheck(redisClient *redis.Client, pgClient *pgxpool.Pool) gin.HandlerF
 
 // 	return origins
 // }
+
+func healthzCheck() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		// Check if observability components are configured and working
+		otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+		lokiEndpoint := os.Getenv("LOKI_ENDPOINT")
+		if lokiEndpoint == "" {
+			lokiEndpoint = os.Getenv("LOKI_URL")
+		}
+
+		otelTracingEnabled := otelEndpoint != ""
+		otelMetricsEnabled := otelEndpoint != ""
+		lokiLoggingEnabled := lokiEndpoint != ""
+
+		// Try to emit a test trace span to verify tracing works
+		tracingWorks := otelTracingEnabled
+		if otelTracingEnabled {
+			span := trace.SpanFromContext(ctx)
+			tracingWorks = span.SpanContext().IsValid()
+		}
+
+		// Check if metrics are initialized
+		metricsWorks := otelMetricsEnabled && metrics.IsInitialized()
+
+		// Overall health status
+		status := "ok"
+		code := 200
+
+		// If critical components are down, mark as degraded
+		if otelTracingEnabled && !tracingWorks {
+			status = "degraded"
+			code = 200 // Still return 200 for ALB, but indicate degraded state
+		}
+
+		c.JSON(code, gin.H{
+			"status":             status,
+			"otel_tracing":       otelTracingEnabled,
+			"otel_tracing_works": tracingWorks,
+			"otel_metrics":       otelMetricsEnabled,
+			"otel_metrics_works": metricsWorks,
+			"loki_logging":       lokiLoggingEnabled,
+			"service_name":       os.Getenv("SERVICE_NAME"),
+			"environment":        os.Getenv("ENV"),
+			"timestamp":          time.Now().Unix(),
+		})
+	}
+}
 
 func generateRequestID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"

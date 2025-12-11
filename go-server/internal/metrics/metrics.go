@@ -1,172 +1,288 @@
 package metrics
 
 import (
+	"context"
 	"runtime"
+	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 var (
+	once      sync.Once
+	meter     metric.Meter
+	initError error
+
 	// HTTP Metrics
-	HTTPRequestsTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "http_requests_total",
-			Help: "Total number of HTTP requests",
-		},
-		[]string{"method", "path", "status"},
-	)
-
-	HTTPRequestDuration = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "http_request_duration_seconds",
-			Help:    "HTTP request latency in seconds",
-			Buckets: prometheus.DefBuckets, // .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10
-		},
-		[]string{"method", "path", "status"},
-	)
-
-	HTTPRequestSize = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "http_request_size_bytes",
-			Help:    "HTTP request size in bytes",
-			Buckets: prometheus.ExponentialBuckets(100, 10, 8), // 100, 1000, 10000, ...
-		},
-		[]string{"method", "path"},
-	)
-
-	HTTPResponseSize = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "http_response_size_bytes",
-			Help:    "HTTP response size in bytes",
-			Buckets: prometheus.ExponentialBuckets(100, 10, 8),
-		},
-		[]string{"method", "path", "status"},
-	)
-
-	HTTPRequestsInFlight = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "http_requests_in_flight",
-			Help: "Current number of HTTP requests being processed",
-		},
-	)
+	httpRequestsTotal    metric.Int64Counter
+	httpRequestDuration  metric.Float64Histogram
+	httpRequestSize      metric.Int64Histogram
+	httpResponseSize     metric.Int64Histogram
+	httpRequestsInFlight metric.Int64UpDownCounter
 
 	// Application Metrics
-	URLCreationTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "url_creation_total",
-			Help: "Total number of URLs created",
-		},
-		[]string{"status"},
-	)
-
-	URLAccessTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "url_access_total",
-			Help: "Total number of URL accesses/redirects",
-		},
-		[]string{"status"},
-	)
-
-	CacheHitsTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "cache_hits_total",
-			Help: "Total number of cache hits",
-		},
-		[]string{"cache_type"},
-	)
-
-	CacheMissesTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "cache_misses_total",
-			Help: "Total number of cache misses",
-		},
-		[]string{"cache_type"},
-	)
+	urlCreationTotal metric.Int64Counter
+	urlAccessTotal   metric.Int64Counter
+	cacheHitsTotal   metric.Int64Counter
+	cacheMissesTotal metric.Int64Counter
 
 	// Database Metrics
-	DBConnectionsInUse = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "db_connections_in_use",
-			Help: "Number of database connections currently in use",
-		},
-	)
-
-	DBConnectionsIdle = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "db_connections_idle",
-			Help: "Number of idle database connections",
-		},
-	)
-
-	DBQueryDuration = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "db_query_duration_seconds",
-			Help:    "Database query duration in seconds",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"query_type"},
-	)
+	dbConnectionsInUse metric.Int64ObservableGauge
+	dbConnectionsIdle  metric.Int64ObservableGauge
+	dbQueryDuration    metric.Float64Histogram
 
 	// System Metrics
-	GoRoutines = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "go_goroutines_count",
-			Help: "Number of goroutines",
-		},
-	)
-
-	MemoryUsage = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "memory_usage_bytes",
-			Help: "Memory usage in bytes",
-		},
-		[]string{"type"},
-	)
-
-	CPUUsage = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "cpu_usage_percent",
-			Help: "CPU usage percentage",
-		},
-	)
+	goRoutines   metric.Int64ObservableGauge
+	memoryUsage  metric.Int64ObservableGauge
+	cpuUsage     metric.Float64ObservableGauge
+	metricsReady bool
 )
 
-// StartSystemMetricsCollection starts collecting system metrics periodically
-func StartSystemMetricsCollection() {
-	go func() {
-		ticker := time.NewTicker(15 * time.Second)
-		defer ticker.Stop()
+// InitMetrics initializes all OTEL metrics instruments
+func InitMetrics() error {
+	var err error
+	once.Do(func() {
+		meter = otel.Meter("github.com/fonsecaaso/TinyUrl/go-server")
 
-		for range ticker.C {
-			collectSystemMetrics()
+		// HTTP Metrics
+		httpRequestsTotal, err = meter.Int64Counter(
+			"http.requests.total",
+			metric.WithDescription("Total number of HTTP requests"),
+		)
+		if err != nil {
+			initError = err
+			return
 		}
-	}()
+
+		httpRequestDuration, err = meter.Float64Histogram(
+			"http.request.duration",
+			metric.WithDescription("HTTP request duration in seconds"),
+			metric.WithUnit("s"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		httpRequestSize, err = meter.Int64Histogram(
+			"http.request.size",
+			metric.WithDescription("HTTP request size in bytes"),
+			metric.WithUnit("By"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		httpResponseSize, err = meter.Int64Histogram(
+			"http.response.size",
+			metric.WithDescription("HTTP response size in bytes"),
+			metric.WithUnit("By"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		httpRequestsInFlight, err = meter.Int64UpDownCounter(
+			"http.requests.in_flight",
+			metric.WithDescription("Current number of HTTP requests being processed"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		// Application Metrics
+		urlCreationTotal, err = meter.Int64Counter(
+			"url.creation.total",
+			metric.WithDescription("Total number of URLs created"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		urlAccessTotal, err = meter.Int64Counter(
+			"url.access.total",
+			metric.WithDescription("Total number of URL accesses/redirects"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		cacheHitsTotal, err = meter.Int64Counter(
+			"cache.hits.total",
+			metric.WithDescription("Total number of cache hits"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		cacheMissesTotal, err = meter.Int64Counter(
+			"cache.misses.total",
+			metric.WithDescription("Total number of cache misses"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		// Database Metrics
+		dbQueryDuration, err = meter.Float64Histogram(
+			"db.query.duration",
+			metric.WithDescription("Database query duration in seconds"),
+			metric.WithUnit("s"),
+		)
+		if err != nil {
+			initError = err
+			return
+		}
+
+		metricsReady = true
+	})
+
+	return initError
 }
 
-func collectSystemMetrics() {
-	// Goroutines
-	GoRoutines.Set(float64(runtime.NumGoroutine()))
+// StartSystemMetricsCollection starts collecting system metrics periodically
+func StartSystemMetricsCollection() error {
+	if !metricsReady {
+		if err := InitMetrics(); err != nil {
+			return err
+		}
+	}
 
-	// Memory stats
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
+	// Register observable gauges for system metrics
+	_, err := meter.Int64ObservableGauge(
+		"go.goroutines",
+		metric.WithDescription("Number of goroutines"),
+		metric.WithInt64Callback(func(ctx context.Context, observer metric.Int64Observer) error {
+			observer.Observe(int64(runtime.NumGoroutine()))
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
 
-	MemoryUsage.WithLabelValues("alloc").Set(float64(m.Alloc))
-	MemoryUsage.WithLabelValues("total_alloc").Set(float64(m.TotalAlloc))
-	MemoryUsage.WithLabelValues("sys").Set(float64(m.Sys))
-	MemoryUsage.WithLabelValues("heap_alloc").Set(float64(m.HeapAlloc))
-	MemoryUsage.WithLabelValues("heap_sys").Set(float64(m.HeapSys))
-	MemoryUsage.WithLabelValues("heap_idle").Set(float64(m.HeapIdle))
-	MemoryUsage.WithLabelValues("heap_in_use").Set(float64(m.HeapInuse))
-	MemoryUsage.WithLabelValues("stack_in_use").Set(float64(m.StackInuse))
+	// Memory metrics
+	_, err = meter.Int64ObservableGauge(
+		"go.memory.alloc",
+		metric.WithDescription("Bytes of allocated heap objects"),
+		metric.WithUnit("By"),
+		metric.WithInt64Callback(func(ctx context.Context, observer metric.Int64Observer) error {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			observer.Observe(int64(m.Alloc))
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = meter.Int64ObservableGauge(
+		"go.memory.heap",
+		metric.WithDescription("Heap memory usage"),
+		metric.WithUnit("By"),
+		metric.WithInt64Callback(func(ctx context.Context, observer metric.Int64Observer) error {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			observer.Observe(int64(m.HeapAlloc))
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // RecordHTTPMetrics records metrics for an HTTP request
-func RecordHTTPMetrics(method, path, status string, duration time.Duration, requestSize, responseSize int64) {
-	HTTPRequestsTotal.WithLabelValues(method, path, status).Inc()
-	HTTPRequestDuration.WithLabelValues(method, path, status).Observe(duration.Seconds())
-	HTTPRequestSize.WithLabelValues(method, path).Observe(float64(requestSize))
-	HTTPResponseSize.WithLabelValues(method, path, status).Observe(float64(responseSize))
+func RecordHTTPMetrics(ctx context.Context, method, path, status string, duration time.Duration, requestSize, responseSize int64) {
+	if !metricsReady {
+		return
+	}
+
+	attrs := metric.WithAttributes(
+		attribute.String("method", method),
+		attribute.String("path", path),
+		attribute.String("status", status),
+	)
+
+	httpRequestsTotal.Add(ctx, 1, attrs)
+	httpRequestDuration.Record(ctx, duration.Seconds(), attrs)
+	httpRequestSize.Record(ctx, requestSize, metric.WithAttributes(
+		attribute.String("method", method),
+		attribute.String("path", path),
+	))
+	httpResponseSize.Record(ctx, responseSize, attrs)
+}
+
+// RecordURLCreation records URL creation metrics
+func RecordURLCreation(ctx context.Context, status string) {
+	if !metricsReady {
+		return
+	}
+	urlCreationTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("status", status)))
+}
+
+// RecordURLAccess records URL access metrics
+func RecordURLAccess(ctx context.Context, status string) {
+	if !metricsReady {
+		return
+	}
+	urlAccessTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("status", status)))
+}
+
+// RecordCacheHit records cache hit metrics
+func RecordCacheHit(ctx context.Context, cacheType string) {
+	if !metricsReady {
+		return
+	}
+	cacheHitsTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("cache_type", cacheType)))
+}
+
+// RecordCacheMiss records cache miss metrics
+func RecordCacheMiss(ctx context.Context, cacheType string) {
+	if !metricsReady {
+		return
+	}
+	cacheMissesTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("cache_type", cacheType)))
+}
+
+// RecordDBQueryDuration records database query duration
+func RecordDBQueryDuration(ctx context.Context, queryType string, duration time.Duration) {
+	if !metricsReady {
+		return
+	}
+	dbQueryDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attribute.String("query_type", queryType)))
+}
+
+// IncrementRequestsInFlight increments the in-flight requests counter
+func IncrementRequestsInFlight(ctx context.Context) {
+	if !metricsReady {
+		return
+	}
+	httpRequestsInFlight.Add(ctx, 1)
+}
+
+// DecrementRequestsInFlight decrements the in-flight requests counter
+func DecrementRequestsInFlight(ctx context.Context) {
+	if !metricsReady {
+		return
+	}
+	httpRequestsInFlight.Add(ctx, -1)
+}
+
+// IsInitialized returns whether metrics are initialized and ready
+func IsInitialized() bool {
+	return metricsReady
 }

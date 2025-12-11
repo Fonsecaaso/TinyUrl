@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/http"
 	"strconv"
 	"time"
 
@@ -11,9 +12,11 @@ import (
 // MetricsMiddleware collects HTTP metrics for each request
 func MetricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
 		// Increment in-flight requests
-		metrics.HTTPRequestsInFlight.Inc()
-		defer metrics.HTTPRequestsInFlight.Dec()
+		metrics.IncrementRequestsInFlight(ctx)
+		defer metrics.DecrementRequestsInFlight(ctx)
 
 		// Record start time
 		start := time.Now()
@@ -43,8 +46,9 @@ func MetricsMiddleware() gin.HandlerFunc {
 		// Get response size
 		responseSize := int64(len(blw.body))
 
-		// Record metrics
+		// Record metrics with context
 		metrics.RecordHTTPMetrics(
+			ctx,
 			c.Request.Method,
 			path,
 			status,
@@ -67,31 +71,18 @@ func (w *bodyLogWriter) Write(b []byte) (int, error) {
 
 
 // computeApproximateRequestSize calculates approximate request size
-func computeApproximateRequestSize(r any) int64 {
-	// Type assertion to get the actual request
-	req, ok := r.(interface {
-		ContentLength() int64
-		URL() interface{ String() string }
-		Method() string
-		Header() interface{ Len() int }
-	})
-
-	if !ok {
-		// Fallback for standard http.Request
-		return 0
-	}
-
+func computeApproximateRequestSize(r *http.Request) int64 {
 	s := int64(0)
 
 	// Add content length if available
-	if req.ContentLength() > 0 {
-		s += req.ContentLength()
+	if r.ContentLength > 0 {
+		s += r.ContentLength
 	}
 
 	// Add approximate size of URL, method, and headers
-	s += int64(len(req.Method()))
-	s += int64(len(req.URL().String()))
-	s += int64(req.Header().Len() * 50) // Rough estimate: 50 bytes per header
+	s += int64(len(r.Method))
+	s += int64(len(r.URL.String()))
+	s += int64(len(r.Header) * 50) // Rough estimate: 50 bytes per header
 
 	return s
 }

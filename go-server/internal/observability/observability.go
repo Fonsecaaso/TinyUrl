@@ -156,9 +156,15 @@ func initTracing(ctx context.Context, res *resource.Resource) (func(context.Cont
 		return nil, fmt.Errorf("only http/protobuf protocol is supported, got: %s", protocol)
 	}
 
+	// Create a temporary logger for initialization (logger.Logger might be nil at this point)
+	tempLogger, _ := zap.NewProduction()
+	if tempLogger == nil {
+		tempLogger = zap.NewNop()
+	}
+
 	// Create HTTP client with logging transport
 	httpClient := &http.Client{
-		Transport: tracing.NewLoggingTransport(logger.Logger),
+		Transport: tracing.NewLoggingTransport(tempLogger),
 	}
 
 	exporter, err := otlptracehttp.New(
@@ -171,7 +177,12 @@ func initTracing(ctx context.Context, res *resource.Resource) (func(context.Cont
 		return nil, fmt.Errorf("failed to create OTLP trace exporter: %w", err)
 	}
 
-	logger.Logger.Info("🚀 OTLP Trace Exporter initialized with logging",
+	// Log initialization (use global logger if available, otherwise temp logger)
+	loggerToUse := logger.Logger
+	if loggerToUse == nil {
+		loggerToUse = tempLogger
+	}
+	loggerToUse.Info("🚀 OTLP Trace Exporter initialized with logging",
 		zap.String("endpoint", endpoint),
 		zap.String("protocol", protocol),
 	)
@@ -206,9 +217,15 @@ func initTracing(ctx context.Context, res *resource.Resource) (func(context.Cont
 func initMetrics(ctx context.Context, res *resource.Resource) (func(context.Context) error, error) {
 	endpoint := getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://observability:4318")
 
+	// Create a temporary logger for initialization
+	tempLogger, _ := zap.NewProduction()
+	if tempLogger == nil {
+		tempLogger = zap.NewNop()
+	}
+
 	// Create HTTP client with logging transport for metrics
 	httpClient := &http.Client{
-		Transport: tracing.NewLoggingTransport(logger.Logger),
+		Transport: tracing.NewLoggingTransport(tempLogger),
 	}
 
 	exporter, err := otlpmetrichttp.New(
@@ -221,7 +238,12 @@ func initMetrics(ctx context.Context, res *resource.Resource) (func(context.Cont
 		return nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
 	}
 
-	logger.Logger.Info("📊 OTLP Metric Exporter initialized with logging",
+	// Log initialization (use global logger if available, otherwise temp logger)
+	loggerToUse := logger.Logger
+	if loggerToUse == nil {
+		loggerToUse = tempLogger
+	}
+	loggerToUse.Info("📊 OTLP Metric Exporter initialized with logging",
 		zap.String("endpoint", endpoint),
 	)
 

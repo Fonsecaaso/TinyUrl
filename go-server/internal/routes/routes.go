@@ -92,6 +92,7 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	api := r.Group("/api")
 
 	api.GET("/health", healthCheck(redisClient, pgClient))
+	api.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	api.POST("/", urlHandler.CreateTinyURL)
 	api.POST("", urlHandler.CreateTinyURL)
 	api.GET("/:id", urlHandler.GetURL)

@@ -72,9 +72,17 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	r.Use(loggingMiddleware())
 	r.Use(rateLimiter.Middleware())
 
-	// Only expose /metrics endpoint in local environment
+	// Metrics endpoint - always register to prevent routing conflicts
+	// In non-local environments, protect with authentication or return 403
 	if os.Getenv("ENV") == "local" {
 		r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	} else {
+		// Register a handler that returns 403 to prevent the catch-all route from matching
+		r.GET("/metrics", func(c *gin.Context) {
+			c.JSON(403, gin.H{
+				"error": "metrics endpoint is only available in local environment",
+			})
+		})
 	}
 
 	// Healthz endpoint for observability status

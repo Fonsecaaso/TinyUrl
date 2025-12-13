@@ -101,6 +101,11 @@ type lokiWriter struct {
 
 // Write implements io.Writer
 func (w *lokiWriter) Write(p []byte) (n int, err error) {
+	// Create a copy of the byte slice to prevent race condition
+	// The original buffer may be reused by the logger before the goroutine completes
+	logData := make([]byte, len(p))
+	copy(logData, p)
+
 	// Send log entry to Loki asynchronously
 	go func() {
 		timestamp := time.Now().UnixNano()
@@ -115,7 +120,7 @@ func (w *lokiWriter) Write(p []byte) (n int, err error) {
 
 		// Parse JSON to extract important fields as labels and add trace_id/span_id
 		var logEntry map[string]interface{}
-		if err := json.Unmarshal(p, &logEntry); err == nil {
+		if err := json.Unmarshal(logData, &logEntry); err == nil {
 			// Extract level (info, warn, error, debug)
 			if level, ok := logEntry["level"].(string); ok && level != "" {
 				labels["level"] = level
@@ -158,7 +163,7 @@ func (w *lokiWriter) Write(p []byte) (n int, err error) {
 				{
 					Stream: labels,
 					Values: [][]string{
-						{timestampStr, string(p)},
+						{timestampStr, string(logData)},
 					},
 				},
 			},

@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 
 	"go.opentelemetry.io/otel"
@@ -16,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/logger"
+	"github.com/fonsecaaso/TinyUrl/go-server/internal/tracing"
 )
 
 // Observability holds all observability components
@@ -154,14 +156,25 @@ func initTracing(ctx context.Context, res *resource.Resource) (func(context.Cont
 		return nil, fmt.Errorf("only http/protobuf protocol is supported, got: %s", protocol)
 	}
 
+	// Create HTTP client with logging transport
+	httpClient := &http.Client{
+		Transport: tracing.NewLoggingTransport(logger.Logger),
+	}
+
 	exporter, err := otlptracehttp.New(
 		ctx,
 		otlptracehttp.WithEndpoint(stripProtocol(endpoint)),
 		otlptracehttp.WithInsecure(), // Using internal network
+		otlptracehttp.WithHTTPClient(httpClient),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OTLP trace exporter: %w", err)
 	}
+
+	logger.Logger.Info("🚀 OTLP Trace Exporter initialized with logging",
+		zap.String("endpoint", endpoint),
+		zap.String("protocol", protocol),
+	)
 
 	// Configure batch span processor with optimized settings
 	bsp := sdktrace.NewBatchSpanProcessor(
@@ -193,14 +206,24 @@ func initTracing(ctx context.Context, res *resource.Resource) (func(context.Cont
 func initMetrics(ctx context.Context, res *resource.Resource) (func(context.Context) error, error) {
 	endpoint := getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://observability:4318")
 
+	// Create HTTP client with logging transport for metrics
+	httpClient := &http.Client{
+		Transport: tracing.NewLoggingTransport(logger.Logger),
+	}
+
 	exporter, err := otlpmetrichttp.New(
 		ctx,
 		otlpmetrichttp.WithEndpoint(stripProtocol(endpoint)),
 		otlpmetrichttp.WithInsecure(),
+		otlpmetrichttp.WithHTTPClient(httpClient),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
 	}
+
+	logger.Logger.Info("📊 OTLP Metric Exporter initialized with logging",
+		zap.String("endpoint", endpoint),
+	)
 
 	// Configure periodic reader with optimized settings
 	reader := metric.NewPeriodicReader(

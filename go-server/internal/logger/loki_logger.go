@@ -46,15 +46,10 @@ func InitLokiLogger(serviceName, environment string) error {
 		}
 	}
 
-	// Create HTTP client for Loki with retry support
+	// Create HTTP client for Loki with retry support and logging
 	lokiHTTP = &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        10,
-			IdleConnTimeout:     30 * time.Second,
-			DisableCompression:  false,
-			DisableKeepAlives:   false,
-		},
+		Timeout:   10 * time.Second,
+		Transport: NewLokiLoggingTransport(),
 	}
 
 	// Create console encoder for development

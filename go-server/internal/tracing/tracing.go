@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 
 	"go.opentelemetry.io/otel"
@@ -11,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.uber.org/zap"
 )
 
 // InitTracer initializes OpenTelemetry tracing with OTLP HTTP exporter
@@ -25,14 +27,29 @@ func InitTracer() func(context.Context) error {
 	// Strip protocol from endpoint (otlptracehttp expects host:port)
 	endpoint = stripProtocol(endpoint)
 
+	// Create logger for tracing
+	logger, _ := zap.NewProduction()
+
+	// Create HTTP client with logging transport
+	httpClient := &http.Client{
+		Transport: NewLoggingTransport(logger),
+	}
+
 	exporter, err := otlptracehttp.New(
 		ctx,
 		otlptracehttp.WithEndpoint(endpoint),
 		otlptracehttp.WithInsecure(),
+		otlptracehttp.WithHTTPClient(httpClient),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create OTLP exporter: %v", err))
 	}
+
+	logger.Info("🚀 OTLP Trace Exporter initialized",
+		zap.String("endpoint", endpoint),
+		zap.String("service_name", serviceName),
+		zap.String("environment", environment),
+	)
 
 	// Create resource with service attributes
 	res, err := resource.New(ctx,

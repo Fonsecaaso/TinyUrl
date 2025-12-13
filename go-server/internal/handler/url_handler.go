@@ -85,6 +85,18 @@ func (h *URLHandler) GetURL(c *gin.Context) {
 		return
 	}
 
+	// Reject reserved words to prevent conflicts with system endpoints
+	reservedWords := []string{"metrics", "health", "healthz", "api"}
+	for _, reserved := range reservedWords {
+		if id == reserved {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error: "Invalid short code - reserved word",
+				Code:  "RESERVED_WORD",
+			})
+			return
+		}
+	}
+
 	url, err := h.service.GetOriginalURL(c.Request.Context(), id)
 	if err != nil {
 		h.handleError(c, err)

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, tap } from 'rxjs';
+import { BehaviorSubject, Observable, tap, interval, Subscription } from 'rxjs';
+import { Router } from '@angular/router';
 import { environment } from '../environments/environment';
 
 export interface LoginRequest {
@@ -24,27 +25,100 @@ export interface User {
   name?: string;
 }
 
+interface TokenPayload {
+  user_id: string;
+  email?: string;
+  name?: string;
+  exp?: number;
+  iat?: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
   private readonly TOKEN_KEY = 'auth_token';
   private readonly API_URL = environment.apiBaseUrl;
+  private readonly TOKEN_CHECK_INTERVAL = 60000; // Check every 60 seconds
 
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
 
-  constructor(private http: HttpClient) {
+  private tokenExpirationTimer?: Subscription;
+
+  constructor(
+    private http: HttpClient,
+    private router: Router
+  ) {
     // Check if user is already logged in on service initialization
     this.checkAuthStatus();
+    this.startTokenExpirationCheck();
   }
 
   private checkAuthStatus(): void {
     const token = this.getToken();
-    if (token) {
-      // Token exists, user is logged in
-      // In a real app, you might want to validate the token with the backend
+    if (token && this.isTokenValid(token)) {
       this.currentUserSubject.next(this.decodeToken(token));
+    } else if (token) {
+      // Token exists but is expired
+      this.handleExpiredToken();
+    }
+  }
+
+  /**
+   * Starts periodic check for token expiration
+   */
+  private startTokenExpirationCheck(): void {
+    // Check token expiration every minute
+    this.tokenExpirationTimer = interval(this.TOKEN_CHECK_INTERVAL).subscribe(() => {
+      const token = this.getToken();
+      if (token && !this.isTokenValid(token)) {
+        this.handleExpiredToken();
+      }
+    });
+  }
+
+  /**
+   * Handles expired token by logging out user and redirecting to login
+   */
+  private handleExpiredToken(): void {
+    console.warn('Token expired. Logging out user...');
+    this.logout();
+    this.router.navigate(['/login'], {
+      queryParams: { reason: 'session_expired' }
+    });
+  }
+
+  /**
+   * Checks if token is valid (not expired)
+   */
+  private isTokenValid(token: string): boolean {
+    try {
+      const payload = this.decodeTokenPayload(token);
+      if (!payload) return false;
+
+      const exp = payload.exp;
+      if (exp) {
+        const expirationDate = new Date(exp * 1000);
+        const now = new Date();
+        // Add 5 second buffer to account for clock skew
+        return expirationDate.getTime() > now.getTime() + 5000;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Decodes token and returns payload
+   */
+  private decodeTokenPayload(token: string): TokenPayload | null {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload as TokenPayload;
+    } catch {
+      return null;
     }
   }
 
@@ -71,6 +145,11 @@ export class AuthService {
   logout(): void {
     this.removeToken();
     this.currentUserSubject.next(null);
+
+    // Clean up timer
+    if (this.tokenExpirationTimer) {
+      this.tokenExpirationTimer.unsubscribe();
+    }
   }
 
   isAuthenticated(): boolean {
@@ -79,18 +158,7 @@ export class AuthService {
       return false;
     }
 
-    // Check if token is expired
-    try {
-      const payload = this.decodeToken(token);
-      const exp = (payload as any).exp;
-      if (exp) {
-        const expirationDate = new Date(exp * 1000);
-        return expirationDate > new Date();
-      }
-      return true;
-    } catch {
-      return false;
-    }
+    return this.isTokenValid(token);
   }
 
   getToken(): string | null {

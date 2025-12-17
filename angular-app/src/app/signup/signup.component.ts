@@ -2,7 +2,9 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
-import { AuthService } from '../auth.service';
+import type { HttpErrorResponse } from '@angular/common/http';
+import type { AuthService } from '../auth.service';
+import type { ErrorHandlerService } from '../error-handler.service';
 
 @Component({
   selector: 'app-signup',
@@ -12,16 +14,17 @@ import { AuthService } from '../auth.service';
   styleUrl: './signup.component.css'
 })
 export class SignupComponent {
-  name: string = '';
-  email: string = '';
-  password: string = '';
-  confirmPassword: string = '';
-  errorMessage: string = '';
-  isLoading: boolean = false;
+  name = '';
+  email = '';
+  password = '';
+  confirmPassword = '';
+  errorMessage = '';
+  isLoading = false;
 
   constructor(
-    private authService: AuthService,
-    private router: Router
+    private readonly authService: AuthService,
+    private readonly router: Router,
+    private readonly errorHandler: ErrorHandlerService
   ) {}
 
   onSubmit(): void {
@@ -55,9 +58,18 @@ export class SignupComponent {
           this.isLoading = false;
           this.router.navigate(['/dashboard']);
         },
-        error: (error) => {
+        error: (error: HttpErrorResponse) => {
           this.isLoading = false;
-          this.errorMessage = error.error?.error || 'Failed to create account. Please try again.';
+          const errorDetails = this.errorHandler.handleError(error);
+
+          // Special handling for EMAIL_EXISTS error
+          if (errorDetails.code === 'EMAIL_EXISTS') {
+            this.errorMessage = 'This email is already registered. Try logging in instead or use a different email.';
+          } else {
+            this.errorMessage = errorDetails.userMessage;
+          }
+
+          this.errorHandler.logError(errorDetails);
         }
       });
   }

@@ -1,8 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
-import { AuthService } from '../auth.service';
+import { Router, RouterModule, ActivatedRoute } from '@angular/router';
+import type { HttpErrorResponse } from '@angular/common/http';
+import type { AuthService } from '../auth.service';
+import type { ErrorHandlerService } from '../error-handler.service';
 
 @Component({
   selector: 'app-login',
@@ -11,16 +13,30 @@ import { AuthService } from '../auth.service';
   templateUrl: './login.component.html',
   styleUrl: './login.component.css'
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   email: string = '';
   password: string = '';
   errorMessage: string = '';
+  infoMessage: string = '';
   isLoading: boolean = false;
 
   constructor(
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute,
+    private errorHandler: ErrorHandlerService
   ) {}
+
+  ngOnInit(): void {
+    // Check for query parameters to show info messages
+    this.route.queryParams.subscribe(params => {
+      if (params['reason'] === 'session_expired') {
+        this.infoMessage = 'Your session has expired. Please log in again.';
+      } else if (params['reason'] === 'unauthorized') {
+        this.infoMessage = 'Your session has expired. Please log in again.';
+      }
+    });
+  }
 
   onSubmit(): void {
     if (!this.email || !this.password) {
@@ -30,6 +46,7 @@ export class LoginComponent {
 
     this.isLoading = true;
     this.errorMessage = '';
+    this.infoMessage = '';
 
     this.authService.login({ email: this.email, password: this.password })
       .subscribe({
@@ -37,9 +54,11 @@ export class LoginComponent {
           this.isLoading = false;
           this.router.navigate(['/dashboard']);
         },
-        error: (error) => {
+        error: (error: HttpErrorResponse) => {
           this.isLoading = false;
-          this.errorMessage = error.error?.error || 'Login failed. Please check your credentials.';
+          const errorDetails = this.errorHandler.handleError(error);
+          this.errorMessage = errorDetails.userMessage;
+          this.errorHandler.logError(errorDetails);
         }
       });
   }

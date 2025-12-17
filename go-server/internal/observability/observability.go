@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -152,8 +154,11 @@ func initTracing(ctx context.Context, res *resource.Resource) (func(context.Cont
 	endpoint := getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://observability:4318")
 	protocol := getEnv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
 
-	if protocol != "http/protobuf" {
-		return nil, fmt.Errorf("only http/protobuf protocol is supported, got: %s", protocol)
+	// Clean protocol value: remove quotes and whitespace
+	protocol = strings.TrimSpace(strings.Trim(protocol, `"`))
+
+	if strings.ToLower(protocol) != "http/protobuf" {
+		return nil, fmt.Errorf("only http/protobuf protocol is supported, got: %q (cleaned from env)", protocol)
 	}
 
 	// Create a temporary logger for initialization (logger.Logger might be nil at this point)
@@ -281,12 +286,45 @@ func getEnv(key, defaultValue string) string {
 }
 
 // stripProtocol removes http:// or https:// from the beginning of an endpoint
+// and extracts only the host:port part, discarding any path.
+// OTLP exporters expect only "host:port" format, as they append the standard paths like /v1/traces
 func stripProtocol(endpoint string) string {
-	if len(endpoint) > 7 && endpoint[:7] == "http://" {
-		return endpoint[7:]
+	// Clean endpoint: remove quotes and whitespace
+	endpoint = strings.TrimSpace(strings.Trim(endpoint, `"`))
+
+	// If endpoint doesn't have a protocol, assume it's already in host:port format
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		// Still need to check for path and extract only host:port
+		if idx := strings.Index(endpoint, "/"); idx != -1 {
+			fmt.Fprintf(os.Stderr, "⚠️  Warning: OTLP endpoint contains path '%s' - extracting only host:port '%s'\n",
+				endpoint, endpoint[:idx])
+			return endpoint[:idx]
+		}
+		return endpoint
 	}
-	if len(endpoint) > 8 && endpoint[:8] == "https://" {
-		return endpoint[8:]
+
+	// Parse the URL properly
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		// Fallback to simple string stripping if parsing fails
+		fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to parse OTLP endpoint URL '%s': %v - using fallback\n", endpoint, err)
+		if strings.HasPrefix(endpoint, "https://") {
+			return endpoint[8:]
+		}
+		if strings.HasPrefix(endpoint, "http://") {
+			return endpoint[7:]
+		}
+		return endpoint
 	}
-	return endpoint
+
+	// Extract host:port (port is included in parsedURL.Host if present)
+	hostPort := parsedURL.Host
+
+	// Log warning if path was present and is being discarded
+	if parsedURL.Path != "" && parsedURL.Path != "/" {
+		fmt.Fprintf(os.Stderr, "⚠️  Warning: OTLP endpoint '%s' contains path '%s' which will be ignored. OTLP library will append standard paths like /v1/traces\n",
+			endpoint, parsedURL.Path)
+	}
+
+	return hostPort
 }

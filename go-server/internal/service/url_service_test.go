@@ -230,7 +230,7 @@ func TestGetOriginalURL_InvalidShortCode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := service.GetOriginalURL(ctx, tc.shortCode)
 			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "invalid short code format")
+			assert.Contains(t, err.Error(), "invalid token")
 		})
 	}
 }

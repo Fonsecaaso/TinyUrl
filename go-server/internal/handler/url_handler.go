@@ -133,6 +133,11 @@ func (h *URLHandler) GetUserURLs(c *gin.Context) {
 
 func (h *URLHandler) handleError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, service.ErrInvalidToken):
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error: "Invalid short URL format",
+			Code:  "INVALID_SHORT_URL",
+		})
 	case errors.Is(err, service.ErrInvalidURL):
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error: "Invalid URL format",

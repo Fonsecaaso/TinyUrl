@@ -82,20 +82,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 func (h *AuthHandler) handleError(c *gin.Context, err error) {
 	switch {
-	// case errors.Is(err, service.ErrInvalidCredentials):
-	// 	c.JSON(http.StatusUnauthorized, ErrorResponse{
-	// 		Error: "Invalid email or password",
-	// 		Code:  "INVALID_CREDENTIALS",
-	// 	})
-	// case errors.Is(err, service.ErrEmailAlreadyExists):
-	// 	c.JSON(http.StatusConflict, ErrorResponse{
-	// 		Error: "Email already registered",
-	// 		Code:  "EMAIL_EXISTS",
-	// 	})
-	case errors.Is(err, service.ErrInvalidURL):
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid URL format",
-			Code:  "INVALID_URL",
+	case errors.Is(err, service.ErrInvalidCredentials):
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error: "Invalid email or password",
+			Code:  "INVALID_CREDENTIALS",
+		})
+	case errors.Is(err, service.ErrEmailAlreadyExists):
+		c.JSON(http.StatusConflict, ErrorResponse{
+			Error: "Email already registered",
+			Code:  "EMAIL_EXISTS",
 		})
 	default:
 		h.logger.Error("Unexpected service error", zap.Error(err))

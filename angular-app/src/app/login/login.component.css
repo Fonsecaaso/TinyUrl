@@ -65,6 +65,16 @@ input.ng-invalid.ng-touched {
   border-color: #e74c3c;
 }
 
+.info-message {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  border: 1px solid #90caf9;
+}
+
 .error-message {
   background-color: #fee;
   color: #c33;

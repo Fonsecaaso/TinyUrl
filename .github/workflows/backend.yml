@@ -128,7 +128,7 @@ jobs:
               --launch-type FARGATE \
               --platform-version LATEST \
               --load-balancers "targetGroupArn=arn:aws:elasticloadbalancing:us-east-1:173941740239:targetgroup/tiny-url-backend-tg/e293f4dbc5fb3348,containerName=tiny-url,containerPort=8080" \
-              --network-configuration "awsvpcConfiguration={subnets=[subnet-0e74fd56f00fc99bb,subnet-06de462555d65e7ed,subnet-0d840e839344ad29a,subnet-0c11dd7b6b9e381ab,subnet-0bd2651cfac4d5c07,subnet-0321f89418c8e0871],securityGroups=[sg-03912536dade39a55],assignPublicIp=ENABLED}" \
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-0d840e839344ad29a,subnet-0bd2651cfac4d5c07],securityGroups=[sg-03912536dade39a55],assignPublicIp=ENABLED}" \
               --health-check-grace-period-seconds 60
           fi
 

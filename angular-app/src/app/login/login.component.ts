@@ -2,9 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
-import type { HttpErrorResponse } from '@angular/common/http';
-import type { AuthService } from '../auth.service';
-import type { ErrorHandlerService } from '../error-handler.service';
+import { HttpErrorResponse } from '@angular/common/http';
+import { AuthService } from '../auth.service';
+import { ErrorHandlerService } from '../error-handler.service';
 
 @Component({
   selector: 'app-login',

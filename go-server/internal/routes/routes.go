@@ -29,6 +29,12 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 		zap.L().Warn("Failed to start system metrics collection", zap.Error(err))
 	}
 
+	// Start database metrics collection
+	if err := metrics.StartDatabaseMetricsCollection(pgClient); err != nil {
+		// Log error but don't fail - metrics are optional
+		zap.L().Warn("Failed to start database metrics collection", zap.Error(err))
+	}
+
 	urlRepo := repository.NewPostgresURLRepository(pgClient, redisClient)
 	userRepo := repository.NewUserRepository(pgClient)
 	urlService := service.NewURLService(urlRepo)
@@ -71,19 +77,6 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	r.Use(middleware.MetricsMiddleware())
 	r.Use(loggingMiddleware())
 	r.Use(rateLimiter.Middleware())
-
-	// Metrics endpoint - always register to prevent routing conflicts
-	// In non-local environments, protect with authentication or return 403
-	if os.Getenv("ENV") == "local" {
-		r.GET("/metrics", gin.WrapH(promhttp.Handler()))
-	} else {
-		// Register a handler that returns 403 to prevent the catch-all route from matching
-		r.GET("/metrics", func(c *gin.Context) {
-			c.JSON(403, gin.H{
-				"error": "metrics endpoint is only available in local environment",
-			})
-		})
-	}
 
 	// Healthz endpoint for observability status
 	r.GET("/healthz", healthzCheck())

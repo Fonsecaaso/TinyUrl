@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -56,6 +57,20 @@ func InitMetrics() error {
 			"http.request.duration",
 			metric.WithDescription("HTTP request duration in seconds"),
 			metric.WithUnit("s"),
+			metric.WithExplicitBucketBoundaries(
+				0.001, // 1ms
+				0.005, // 5ms
+				0.010, // 10ms
+				0.025, // 25ms
+				0.050, // 50ms
+				0.100, // 100ms
+				0.250, // 250ms
+				0.500, // 500ms
+				1.0,   // 1s
+				2.5,   // 2.5s
+				5.0,   // 5s
+				10.0,  // 10s
+			),
 		)
 		if err != nil {
 			initError = err
@@ -66,6 +81,17 @@ func InitMetrics() error {
 			"http.request.size",
 			metric.WithDescription("HTTP request size in bytes"),
 			metric.WithUnit("By"),
+			metric.WithExplicitBucketBoundaries(
+				100,     // 100 bytes
+				1024,    // 1 KB
+				5120,    // 5 KB
+				10240,   // 10 KB
+				51200,   // 50 KB
+				102400,  // 100 KB
+				512000,  // 500 KB
+				1048576, // 1 MB
+				5242880, // 5 MB
+			),
 		)
 		if err != nil {
 			initError = err
@@ -76,6 +102,17 @@ func InitMetrics() error {
 			"http.response.size",
 			metric.WithDescription("HTTP response size in bytes"),
 			metric.WithUnit("By"),
+			metric.WithExplicitBucketBoundaries(
+				100,     // 100 bytes
+				1024,    // 1 KB
+				5120,    // 5 KB
+				10240,   // 10 KB
+				51200,   // 50 KB
+				102400,  // 100 KB
+				512000,  // 500 KB
+				1048576, // 1 MB
+				5242880, // 5 MB
+			),
 		)
 		if err != nil {
 			initError = err
@@ -133,6 +170,19 @@ func InitMetrics() error {
 			"db.query.duration",
 			metric.WithDescription("Database query duration in seconds"),
 			metric.WithUnit("s"),
+			metric.WithExplicitBucketBoundaries(
+				0.001, // 1ms
+				0.005, // 5ms
+				0.010, // 10ms
+				0.025, // 25ms
+				0.050, // 50ms
+				0.100, // 100ms
+				0.250, // 250ms
+				0.500, // 500ms
+				1.0,   // 1s
+				2.5,   // 2.5s
+				5.0,   // 5s
+			),
 		)
 		if err != nil {
 			initError = err
@@ -166,15 +216,30 @@ func StartSystemMetricsCollection() error {
 		return err
 	}
 
-	// Memory metrics
+	// Memory metrics - single gauge with type label
 	_, err = meter.Int64ObservableGauge(
-		"go.memory.alloc",
-		metric.WithDescription("Bytes of allocated heap objects"),
+		"memory.usage",
+		metric.WithDescription("Memory usage in bytes by type"),
 		metric.WithUnit("By"),
 		metric.WithInt64Callback(func(ctx context.Context, observer metric.Int64Observer) error {
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
-			observer.Observe(int64(m.Alloc))
+
+			// heap_alloc: bytes of allocated heap objects
+			observer.Observe(int64(m.Alloc), metric.WithAttributes(
+				attribute.String("type", "heap_alloc"),
+			))
+
+			// heap_in_use: bytes in in-use spans
+			observer.Observe(int64(m.HeapInuse), metric.WithAttributes(
+				attribute.String("type", "heap_in_use"),
+			))
+
+			// sys: total bytes of memory obtained from the OS
+			observer.Observe(int64(m.Sys), metric.WithAttributes(
+				attribute.String("type", "sys"),
+			))
+
 			return nil
 		}),
 	)
@@ -182,14 +247,42 @@ func StartSystemMetricsCollection() error {
 		return err
 	}
 
-	_, err = meter.Int64ObservableGauge(
-		"go.memory.heap",
-		metric.WithDescription("Heap memory usage"),
-		metric.WithUnit("By"),
+	return nil
+}
+
+// StartDatabaseMetricsCollection starts collecting database connection pool metrics
+func StartDatabaseMetricsCollection(pool *pgxpool.Pool) error {
+	if !metricsReady {
+		if err := InitMetrics(); err != nil {
+			return err
+		}
+	}
+
+	if pool == nil {
+		return nil // No pool provided, skip DB metrics
+	}
+
+	// Database connections in use
+	_, err := meter.Int64ObservableGauge(
+		"db.connections.in_use",
+		metric.WithDescription("Number of database connections currently in use"),
 		metric.WithInt64Callback(func(ctx context.Context, observer metric.Int64Observer) error {
-			var m runtime.MemStats
-			runtime.ReadMemStats(&m)
-			observer.Observe(int64(m.HeapAlloc))
+			stats := pool.Stat()
+			observer.Observe(int64(stats.AcquiredConns()))
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+
+	// Database connections idle
+	_, err = meter.Int64ObservableGauge(
+		"db.connections.idle",
+		metric.WithDescription("Number of idle database connections in the pool"),
+		metric.WithInt64Callback(func(ctx context.Context, observer metric.Int64Observer) error {
+			stats := pool.Stat()
+			observer.Observe(int64(stats.IdleConns()))
 			return nil
 		}),
 	)

@@ -81,9 +81,40 @@ jobs:
         run: |
           docker push 173941740239.dkr.ecr.us-east-1.amazonaws.com/tiny-url-frontend:latest
 
-      - name: ECS Deployment
+      - name: Deploy ECS Service
         run: |
-          aws ecs update-service \
-            --cluster tiny-url-cluster \
-            --service tiny-url-frontend-task-service-anxbjfu9 \
-            --force-new-deployment
+          SERVICE_NAME="tiny-url-frontend-v1"
+          CLUSTER="tiny-url-cluster"
+
+          TASK_DEF_ARN=$(aws ecs describe-task-definition \
+            --task-definition tiny-url-frontend-task \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          if aws ecs describe-services \
+            --cluster $CLUSTER \
+            --services $SERVICE_NAME \
+            --query "services[0].status" \
+            --output text 2>/dev/null | grep -q ACTIVE; then
+
+            echo "Service exists. Updating..."
+            aws ecs update-service \
+              --cluster $CLUSTER \
+              --service $SERVICE_NAME \
+              --task-definition $TASK_DEF_ARN \
+              --force-new-deployment
+
+          else
+
+            echo "Service does not exist. Creating..."
+            aws ecs create-service \
+              --cluster $CLUSTER \
+              --service-name $SERVICE_NAME \
+              --task-definition $TASK_DEF_ARN \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --platform-version LATEST \
+              --load-balancers "targetGroupArn=arn:aws:elasticloadbalancing:us-east-1:173941740239:targetgroup/tiny-url-front-tg/37d0f85d0c1d5013,containerName=tiny-url-frontend,containerPort=80" \
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-0e74fd56f00fc99bb,subnet-06de462555d65e7ed,subnet-0d840e839344ad29a,subnet-0c11dd7b6b9e381ab,subnet-0bd2651cfac4d5c07,subnet-0321f89418c8e0871],securityGroups=[sg-03912536dade39a55],assignPublicIp=ENABLED}" \
+              --health-check-grace-period-seconds 60
+          fi     

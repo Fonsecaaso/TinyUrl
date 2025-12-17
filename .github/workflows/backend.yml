@@ -98,7 +98,11 @@ jobs:
         run: |
           SERVICE_NAME="tiny-url-backend-v1"
           CLUSTER="tiny-url-cluster"
-          TASK_DEF="tiny-url-task:latest"
+
+          TASK_DEF_ARN=$(aws ecs describe-task-definition \
+            --task-definition tiny-url-task \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
 
           if aws ecs describe-services \
             --cluster $CLUSTER \
@@ -110,7 +114,7 @@ jobs:
             aws ecs update-service \
               --cluster $CLUSTER \
               --service $SERVICE_NAME \
-              --task-definition $TASK_DEF \
+              --task-definition $TASK_DEF_ARN \
               --force-new-deployment
 
           else
@@ -119,7 +123,7 @@ jobs:
             aws ecs create-service \
               --cluster $CLUSTER \
               --service-name $SERVICE_NAME \
-              --task-definition $TASK_DEF \
+              --task-definition $TASK_DEF_ARN \
               --desired-count 1 \
               --launch-type FARGATE \
               --platform-version LATEST \

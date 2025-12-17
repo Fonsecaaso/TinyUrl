@@ -19,6 +19,7 @@ import (
 
 var (
 	ErrInvalidURL      = errors.New("invalid URL format")
+	ErrInvalidToken    = errors.New("invalid token")
 	ErrIDGenerationMax = errors.New("failed to generate unique ID after max attempts")
 )
 
@@ -41,7 +42,7 @@ func NewURLService(repo repository.URLRepository) *URLService {
 
 func (s *URLService) ShortenURL(ctx context.Context, rawURL string, userId *uuid.UUID) (string, bool, error) {
 	if !s.isValidURL(rawURL) {
-		s.logger.Warn("Invalid URL provided", zap.String("url", rawURL))
+		s.logger.Warn("invalid URL format", zap.String("url", rawURL))
 		return "", false, ErrInvalidURL
 	}
 
@@ -83,7 +84,7 @@ func (s *URLService) GetOriginalURL(ctx context.Context, shortCode string) (stri
 	if !s.isValidID(shortCode) {
 		s.logger.Warn("Invalid short code format", zap.String("shortCode", shortCode))
 		metrics.RecordURLAccess(ctx, "error")
-		return "", errors.New("invalid short code format")
+		return "", ErrInvalidToken
 	}
 
 	urlModel, err := s.repo.FindByID(ctx, shortCode)
@@ -157,7 +158,15 @@ func (s *URLService) isValidURL(rawURL string) bool {
 		return false
 	}
 
-	return parsed.Scheme != "" && parsed.Host != ""
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return false
+	}
+
+	if !strings.Contains(parsed.Host, ".") {
+		return false
+	}
+
+	return true
 }
 
 func (s *URLService) isValidID(id string) bool {

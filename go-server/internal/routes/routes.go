@@ -1,6 +1,7 @@
 package route
 
 import (
+	"net/http"
 	"os"
 	"time"
 
@@ -8,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -20,7 +20,7 @@ import (
 	"github.com/fonsecaaso/TinyUrl/go-server/internal/service"
 )
 
-func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine {
+func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool, prometheusHandler http.Handler) *gin.Engine {
 	r := gin.New()
 
 	// Start system metrics collection
@@ -85,7 +85,17 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool) *gin.Engine 
 	api := r.Group("/api")
 
 	api.GET("/health", healthCheck(redisClient, pgClient))
-	api.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// Metrics endpoint - use OTEL Prometheus exporter if available, otherwise use default handler
+	if prometheusHandler != nil {
+		api.GET("/metrics", gin.WrapH(prometheusHandler))
+	} else {
+		// Fallback: expose basic Go metrics
+		api.GET("/metrics", func(c *gin.Context) {
+			c.JSON(200, gin.H{"error": "metrics not configured"})
+		})
+	}
+
 	api.POST("/", urlHandler.CreateTinyURL)
 	api.POST("", urlHandler.CreateTinyURL)
 	api.GET("/:id", urlHandler.GetURL)

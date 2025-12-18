@@ -8,9 +8,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	promexporter "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -24,11 +27,12 @@ import (
 
 // Observability holds all observability components
 type Observability struct {
-	tracerShutdown func(ctx context.Context) error
-	meterShutdown  func(ctx context.Context) error
-	loggerShutdown func(ctx context.Context) error
-	Logger         *zap.Logger
-	initialized    ObservabilityStatus
+	tracerShutdown    func(ctx context.Context) error
+	meterShutdown     func(ctx context.Context) error
+	loggerShutdown    func(ctx context.Context) error
+	Logger            *zap.Logger
+	PrometheusHandler http.Handler
+	initialized       ObservabilityStatus
 }
 
 // ObservabilityStatus tracks which components are initialized
@@ -124,12 +128,13 @@ func SetupObservability(ctx context.Context) (*Observability, error) {
 
 	// Initialize Metrics (only if OTEL endpoint is set)
 	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" {
-		meterShutdown, err := initMetrics(ctx, res)
+		meterShutdown, promHandler, err := initMetrics(ctx, res)
 		if err != nil {
 			// Metrics are optional, log warning but continue
 			fmt.Printf("Warning: failed to initialize metrics: %v\n", err)
 		} else {
 			obs.meterShutdown = meterShutdown
+			obs.PrometheusHandler = promHandler
 			obs.initialized.MetricsEnabled = true
 		}
 	}
@@ -218,8 +223,8 @@ func initTracing(ctx context.Context, res *resource.Resource) (func(context.Cont
 	return tracerProvider.Shutdown, nil
 }
 
-// initMetrics initializes OpenTelemetry metrics
-func initMetrics(ctx context.Context, res *resource.Resource) (func(context.Context) error, error) {
+// initMetrics initializes OpenTelemetry metrics with both OTLP push and Prometheus pull exporters
+func initMetrics(ctx context.Context, res *resource.Resource) (func(context.Context) error, http.Handler, error) {
 	endpoint := getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://observability:4318")
 
 	// Create a temporary logger for initialization
@@ -233,14 +238,26 @@ func initMetrics(ctx context.Context, res *resource.Resource) (func(context.Cont
 		Transport: tracing.NewLoggingTransport(tempLogger),
 	}
 
-	exporter, err := otlpmetrichttp.New(
+	// Create OTLP exporter for push model (to OTEL Collector)
+	otlpExporter, err := otlpmetrichttp.New(
 		ctx,
 		otlpmetrichttp.WithEndpoint(stripProtocol(endpoint)),
 		otlpmetrichttp.WithInsecure(),
 		otlpmetrichttp.WithHTTPClient(httpClient),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
+		return nil, nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
+	}
+
+	// Create a custom Prometheus registry
+	registry := prometheus.NewRegistry()
+
+	// Create Prometheus exporter for pull model (direct scraping) with the custom registry
+	prometheusExporter, err := promexporter.New(
+		promexporter.WithRegisterer(registry),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create Prometheus exporter: %w", err)
 	}
 
 	// Log initialization (use global logger if available, otherwise temp logger)
@@ -248,24 +265,30 @@ func initMetrics(ctx context.Context, res *resource.Resource) (func(context.Cont
 	if loggerToUse == nil {
 		loggerToUse = tempLogger
 	}
-	loggerToUse.Info("📊 OTLP Metric Exporter initialized with logging",
-		zap.String("endpoint", endpoint),
+	loggerToUse.Info("📊 Metric Exporters initialized",
+		zap.String("otlp_endpoint", endpoint),
+		zap.String("prometheus_endpoint", "/api/metrics"),
 	)
 
-	// Configure periodic reader with optimized settings
-	reader := metric.NewPeriodicReader(
-		exporter,
+	// Configure periodic reader for OTLP push with optimized settings
+	otlpReader := metric.NewPeriodicReader(
+		otlpExporter,
 		metric.WithInterval(30000000000), // 30 seconds in nanoseconds
 	)
 
+	// Create MeterProvider with both readers
 	meterProvider := metric.NewMeterProvider(
 		metric.WithResource(res),
-		metric.WithReader(reader),
+		metric.WithReader(otlpReader),        // Push to OTEL Collector
+		metric.WithReader(prometheusExporter), // Pull from /metrics endpoint
 	)
 
 	otel.SetMeterProvider(meterProvider)
 
-	return meterProvider.Shutdown, nil
+	// Create HTTP handler from the Prometheus registry
+	prometheusHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+
+	return meterProvider.Shutdown, prometheusHandler, nil
 }
 
 // initLogging initializes structured logging with Loki

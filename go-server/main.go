@@ -68,7 +68,7 @@ func main() {
 		obs.Logger.Info("redis connection established")
 	}
 
-	r := route.SetupRouter(redisClient, pgClient)
+	r := route.SetupRouter(redisClient, pgClient, obs.PrometheusHandler)
 	obs.Logger.Info("starting server on :8080")
 
 	// Create HTTP server with explicit configuration

@@ -33,6 +33,9 @@ func NewRateLimiter(requestsPerWindow int, window time.Duration) *RateLimiter {
 	return rl
 }
 
+// TODO:
+// 1. refator rate limiter to use userID instead of user IP
+// 2. change from fixed window to token bucket
 func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Skip rate limiting for CORS preflight requests
@@ -52,8 +55,8 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 			c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", rl.rate))
 			c.Header("X-RateLimit-Window", rl.window.String())
 			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error": "Rate limit exceeded",
-				"code":  "RATE_LIMIT_EXCEEDED",
+				"error":       "Rate limit exceeded",
+				"code":        "RATE_LIMIT_EXCEEDED",
 				"retry_after": rl.window.Seconds(),
 			})
 			c.Abort()
@@ -67,10 +70,10 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 func (rl *RateLimiter) allow(clientIP string) bool {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
-	
+
 	now := time.Now()
 	bucket, exists := rl.requests[clientIP]
-	
+
 	if !exists || now.After(bucket.resetTime) {
 		rl.requests[clientIP] = &clientBucket{
 			count:     1,
@@ -78,11 +81,11 @@ func (rl *RateLimiter) allow(clientIP string) bool {
 		}
 		return true
 	}
-	
+
 	if bucket.count >= rl.rate {
 		return false
 	}
-	
+
 	bucket.count++
 	return true
 }
@@ -90,7 +93,7 @@ func (rl *RateLimiter) allow(clientIP string) bool {
 func (rl *RateLimiter) cleanup() {
 	ticker := time.NewTicker(rl.window)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		rl.mutex.Lock()
 		now := time.Now()

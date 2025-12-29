@@ -46,7 +46,7 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool, prometheusHa
 	r.RedirectTrailingSlash = true
 	r.RemoveExtraSlash = true
 
-	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
+	// rateLimiter := middleware.NewRateLimiter(100, time.Minute) commented rate limiter to make some load tests
 
 	serviceName := os.Getenv("SERVICE_NAME")
 	if serviceName == "" {
@@ -76,7 +76,7 @@ func SetupRouter(redisClient *redis.Client, pgClient *pgxpool.Pool, prometheusHa
 	r.Use(requestIDMiddleware())
 	r.Use(middleware.MetricsMiddleware())
 	r.Use(loggingMiddleware())
-	r.Use(rateLimiter.Middleware())
+	// r.Use(rateLimiter.Middleware()) commented rate limiter to make some load tests
 
 	// Healthz endpoint for observability status
 	r.GET("/healthz", healthzCheck())

@@ -23,7 +23,6 @@ func main() {
 		log.Println("Warning: .env file not found, using environment variables")
 	}
 
-	// Initialize observability (tracing, metrics, logging)
 	obs, err := observability.SetupObservability(ctx)
 	if err != nil {
 		log.Fatalf("failed to initialize observability: %v", err)
@@ -34,7 +33,6 @@ func main() {
 		}
 	}()
 
-	// Log observability initialization status
 	status := obs.GetStatus()
 	obs.Logger.Info("Observability initialized",
 		zap.Bool("tracing_enabled", status.TracingEnabled),
@@ -68,35 +66,29 @@ func main() {
 		obs.Logger.Info("redis connection established")
 	}
 
-	r := route.SetupRouter(redisClient, pgClient, obs.PrometheusHandler)
+	r := route.SetupRouter(redisClient, pgClient)
 	obs.Logger.Info("starting server on :8080")
 
-	// Create HTTP server with explicit configuration
 	srv := &http.Server{
 		Addr:    ":8080",
 		Handler: r,
 	}
 
-	// Channel to listen for shutdown signals
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start server in goroutine
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			obs.Logger.Fatal("server failed to start", zap.Error(err))
 		}
 	}()
 
-	// Wait for shutdown signal
 	<-quit
 	obs.Logger.Info("shutting down server gracefully...")
 
-	// Create shutdown context with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
-	// Shutdown HTTP server gracefully
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		obs.Logger.Error("server forced to shutdown", zap.Error(err))
 	}

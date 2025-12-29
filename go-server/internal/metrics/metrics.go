@@ -4,6 +4,7 @@ import (
 	"context"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -240,6 +241,50 @@ func StartSystemMetricsCollection() error {
 				attribute.String("type", "sys"),
 			))
 
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+
+	// CPU metrics - process CPU time
+	_, err = meter.Float64ObservableCounter(
+		"process.cpu.seconds",
+		metric.WithDescription("Total CPU time consumed by the process in seconds"),
+		metric.WithUnit("s"),
+		metric.WithFloat64Callback(func(ctx context.Context, observer metric.Float64Observer) error {
+			// Get process CPU times using syscall
+			var rusage syscall.Rusage
+			if err := syscall.Getrusage(syscall.RUSAGE_SELF, &rusage); err != nil {
+				return err
+			}
+
+			// Calculate total CPU time (user + system) in seconds
+			userCPU := float64(rusage.Utime.Sec) + float64(rusage.Utime.Usec)/1e6
+			sysCPU := float64(rusage.Stime.Sec) + float64(rusage.Stime.Usec)/1e6
+			totalCPU := userCPU + sysCPU
+
+			observer.Observe(totalCPU)
+			return nil
+		}),
+	)
+	if err != nil {
+		return err
+	}
+
+	// GC metrics - garbage collection pause time
+	_, err = meter.Float64ObservableCounter(
+		"go.gc.duration.seconds",
+		metric.WithDescription("Total time spent in garbage collection pauses in seconds"),
+		metric.WithUnit("s"),
+		metric.WithFloat64Callback(func(ctx context.Context, observer metric.Float64Observer) error {
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+
+			// PauseTotalNs is the cumulative nanoseconds in GC stop-the-world pauses
+			gcPauseSeconds := float64(m.PauseTotalNs) / 1e9
+			observer.Observe(gcPauseSeconds)
 			return nil
 		}),
 	)
